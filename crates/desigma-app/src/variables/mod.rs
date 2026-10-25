@@ -80,6 +80,8 @@ pub struct VarsState {
     pub full: bool,
     /// Top-left of the floating panel; `None` = default position.
     pub float_pos: Option<egui::Pos2>,
+    /// Size of the floating panel; `None` = default size.
+    pub float_size: Option<egui::Vec2>,
     /// Sidebar hidden by its toggle.
     pub sidebar_hidden: bool,
     /// Selected collection id.
@@ -114,6 +116,7 @@ impl Default for VarsState {
             open: false,
             full: false,
             float_pos: None,
+            float_size: None,
             sidebar_hidden: false,
             collection: None,
             group: None,

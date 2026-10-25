@@ -123,9 +123,35 @@ fn floating_panel_drags_by_its_header() {
     let mut s = Sim::new();
     open_view(&mut s, false);
     assert!(s.app().vars.float_pos.is_none());
+    // the panel opens filling the window, so shrink it first to leave room to move
+    s.shell.app.vars.float_size = Some(egui::vec2(700.0, 400.0));
+    s.frame(vec![]);
     s.drag(Pos2::new(110.0, 28.0), Pos2::new(190.0, 108.0));
     let p = s.app().vars.float_pos.expect("moved");
     assert!(p.x > 60.0 && p.y > 60.0, "{p:?}");
+}
+
+#[test]
+fn floating_panel_resizes_from_its_corner_grip() {
+    let mut s = Sim::new();
+    open_view(&mut s, false);
+    assert!(s.app().vars.float_size.is_none(), "starts at the default size");
+    let screen = s.ctx.content_rect();
+    let def = crate::variables::view::floating_rect(s.app(), screen).size();
+    let grip = s.rect_of("vars-resize");
+    s.drag(grip.center(), grip.center() + egui::vec2(158.0, 120.0));
+    let size = s.app().vars.float_size.expect("resized");
+    assert!(size.x > def.x && size.y > def.y, "{size:?} vs {def:?}");
+    // the grip follows the new corner and the panel stays where it was
+    s.frame(vec![]);
+    let grown = s.rect_of("vars-resize");
+    assert!(grown.right() > grip.right() && grown.bottom() > grip.bottom(), "the grip followed the new corner");
+    assert!(s.app().vars.float_pos.is_none(), "resizing does not move the panel");
+    // dragging far inward clamps at the minimum instead of collapsing the panel
+    let grip = s.rect_of("vars-resize");
+    s.drag(grip.center(), Pos2::new(60.0, 60.0));
+    let size = s.app().vars.float_size.unwrap();
+    assert_eq!((size.x, size.y), (theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H), "{size:?}");
 }
 
 #[test]

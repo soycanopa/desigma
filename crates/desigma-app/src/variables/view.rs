@@ -84,8 +84,13 @@ impl Geom {
 }
 
 pub fn floating_rect(app: &App, screen: Rect) -> Rect {
-    let size = Vec2::new(theme::VAR_FLOAT_W.min(screen.width()), theme::VAR_FLOAT_H.min(screen.height()));
-    let pos = app.vars.float_pos.unwrap_or(Pos2::new(0.0, theme::VAR_FLOAT_Y));
+    let size = app
+        .vars
+        .float_size
+        .unwrap_or_else(|| screen.size() - Vec2::splat(theme::VAR_FLOAT_INSET * 2.0))
+        .max(Vec2::new(theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H))
+        .min(screen.size());
+    let pos = app.vars.float_pos.unwrap_or_else(|| screen.min + Vec2::splat(theme::VAR_FLOAT_INSET));
     let x = pos.x.clamp(screen.left(), (screen.right() - size.x).max(screen.left()));
     let y = pos.y.clamp(screen.top(), (screen.bottom() - size.y).max(screen.top()));
     Rect::from_min_size(Pos2::new(x, y), size)
@@ -254,7 +259,7 @@ pub fn show(app: &mut App, ui: &mut Ui, content: Rect) {
         if g.floating {
             widgets::elevation_400(&p, g.panel, theme::MENU_RADIUS);
         }
-        let radius = if g.floating { theme::cr_each(0, theme::MENU_RADIUS, theme::MENU_RADIUS, 0) } else { theme::cr(0) };
+        let radius = if g.floating { theme::cr(theme::MENU_RADIUS) } else { theme::cr(0) };
         p.rect_filled(g.panel, radius, theme::BG);
         if g.floating {
             p.rect_stroke(g.panel, radius, Stroke::new(1.0, theme::ELEVATION_400_RING), StrokeKind::Inside);
@@ -273,6 +278,9 @@ pub fn show(app: &mut App, ui: &mut Ui, content: Rect) {
             sidebar(app, ui, &g, &mut fr);
         }
         main(app, ui, &g, &mut fr);
+        if g.floating {
+            resize_grip(app, ui, &g);
+        }
         let _ = &p;
     });
 
@@ -341,6 +349,24 @@ fn keys(app: &mut App, ctx: &Context, view: &VariableStore) {
 }
 
 // ------------------------------------------------------------------ small widgets
+
+/// Invisible bottom-right corner grip that resizes the floating panel; only the cursor
+/// hints at it on hover. The size is remembered between openings like the position, and
+/// never goes below the minimum or beyond the screen.
+fn resize_grip(app: &mut App, ui: &mut Ui, g: &Geom) {
+    let rect = Rect::from_min_size(g.panel.right_bottom() - Vec2::splat(18.0), Vec2::splat(18.0));
+    let r = ui.interact(rect, Id::new("vars-resize"), Sense::drag());
+    widgets::record(ui, "vars-resize", rect);
+    if r.hovered() || r.dragged() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+    }
+    if r.dragged() {
+        if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
+            let size = (pos - g.panel.min).max(Vec2::new(theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H)).min(ui.ctx().content_rect().size());
+            app.vars.float_size = Some(size);
+        }
+    }
+}
 
 fn swatch(p: &egui::Painter, rect: Rect, color: Color32) {
     let r = theme::cr((rect.width() * 0.2).round() as u8);
