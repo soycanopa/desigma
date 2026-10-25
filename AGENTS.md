@@ -55,7 +55,9 @@ desigma-diff compare before.png after.png --out diff.png --tolerance 2 --thresho
   window with synthetic egui input, and widgets are found by name via `Sim::rect_of`
   after `widgets::record`. New interactive UI records itself there too.
 - Screenshot runs can transiently fail with "screenshot was not captured" (a window
-  sizing race); rerun before investigating.
+  sizing race); rerun before investigating. If they fail persistently, the glow
+  renderer's screen read is broken on that machine — pass `--gpu` to capture through
+  wgpu instead.
 
 ## Where code goes
 
