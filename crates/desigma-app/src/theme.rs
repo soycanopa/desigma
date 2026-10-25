@@ -601,11 +601,14 @@ pub const HOME_THUMB_BG: Color32 = rgb(0x3A3A3A);
 pub const VAR_SIDEBAR_W: f32 = 240.0;
 /// Top bar height of the full view (excluding its 1px bottom border).
 pub const VAR_BAR_H: f32 = 48.0;
-/// Floating panel: default inset from the screen edges; the panel opens filling the window.
-pub const VAR_FLOAT_INSET: f32 = 16.0;
-/// Floating panel: smallest size the corner grip allows (sidebar plus the sticky name column).
+/// Floating panel: default size (a centered modal over the editor) and smallest size the
+/// corner grips allow (sidebar plus the sticky name column).
+pub const VAR_FLOAT_W: f32 = 800.0;
+pub const VAR_FLOAT_H: f32 = 580.0;
 pub const VAR_FLOAT_MIN_W: f32 = 480.0;
 pub const VAR_FLOAT_MIN_H: f32 = 240.0;
+/// Hit size of each invisible corner grip.
+pub const VAR_GRIP: f32 = 16.0;
 pub const VAR_FLOAT_BAR_H: f32 = 40.0;
 pub const VAR_HEAD_H: f32 = 40.0;
 pub const VAR_ROW_H: f32 = 40.0;

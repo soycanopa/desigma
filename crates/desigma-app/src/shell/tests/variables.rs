@@ -119,16 +119,18 @@ fn rail_opens_floating_panel_then_full_view_and_back() {
 }
 
 #[test]
-fn floating_panel_drags_by_its_header() {
+fn floating_panel_opens_centered_and_drags_by_its_header() {
     let mut s = Sim::new();
     open_view(&mut s, false);
     assert!(s.app().vars.float_pos.is_none());
-    // the panel opens filling the window, so shrink it first to leave room to move
-    s.shell.app.vars.float_size = Some(egui::vec2(700.0, 400.0));
-    s.frame(vec![]);
-    s.drag(Pos2::new(110.0, 28.0), Pos2::new(190.0, 108.0));
+    // the default panel is a centered 800x580 modal
+    let screen = s.ctx.content_rect();
+    let r = crate::variables::view::floating_rect(s.app(), screen);
+    assert_eq!(r.size(), egui::vec2(theme::VAR_FLOAT_W, theme::VAR_FLOAT_H));
+    assert!((r.center().x - screen.center().x).abs() < 1.0 && (r.center().y - screen.center().y).abs() < 1.0, "{r:?}");
+    s.drag(Pos2::new(r.left() + 110.0, r.top() + 28.0), Pos2::new(r.left() + 190.0, r.top() + 108.0));
     let p = s.app().vars.float_pos.expect("moved");
-    assert!(p.x > 60.0 && p.y > 60.0, "{p:?}");
+    assert!(p.x > r.left() + 60.0 && p.y > r.top() + 60.0, "{p:?}");
 }
 
 #[test]
@@ -137,19 +139,51 @@ fn floating_panel_resizes_from_its_corner_grip() {
     open_view(&mut s, false);
     assert!(s.app().vars.float_size.is_none(), "starts at the default size");
     let screen = s.ctx.content_rect();
-    let def = crate::variables::view::floating_rect(s.app(), screen).size();
+    let before = crate::variables::view::floating_rect(s.app(), screen);
     let grip = s.rect_of("vars-resize");
     s.drag(grip.center(), grip.center() + egui::vec2(158.0, 120.0));
     let size = s.app().vars.float_size.expect("resized");
-    assert!(size.x > def.x && size.y > def.y, "{size:?} vs {def:?}");
-    // the grip follows the new corner and the panel stays where it was
+    assert!(size.x > before.width() && size.y > before.height(), "{size:?} vs {before:?}");
+    // the opposite corner stays put: the top-left never moves
+    let pos = s.app().vars.float_pos.expect("set by the resize");
+    assert_eq!((pos.x, pos.y), (before.left(), before.top()), "the dragged corner's opposite edges are fixed");
+    // the grip follows the new corner
     s.frame(vec![]);
     let grown = s.rect_of("vars-resize");
     assert!(grown.right() > grip.right() && grown.bottom() > grip.bottom(), "the grip followed the new corner");
-    assert!(s.app().vars.float_pos.is_none(), "resizing does not move the panel");
     // dragging far inward clamps at the minimum instead of collapsing the panel
     let grip = s.rect_of("vars-resize");
     s.drag(grip.center(), Pos2::new(60.0, 60.0));
+    let size = s.app().vars.float_size.unwrap();
+    assert_eq!((size.x, size.y), (theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H), "{size:?}");
+}
+
+#[test]
+fn floating_panel_resizes_from_every_corner() {
+    let mut s = Sim::new();
+    open_view(&mut s, false);
+    let screen = s.ctx.content_rect();
+    // top-left: both edges move, the bottom-right corner stays fixed
+    let r0 = crate::variables::view::floating_rect(s.app(), screen);
+    let tl = s.rect_of("vars-resize-tl");
+    s.drag(tl.center(), tl.center() + egui::vec2(120.0, 90.0));
+    let r1 = crate::variables::view::floating_rect(s.app(), screen);
+    assert!(r1.left() > r0.left() && r1.top() > r0.top(), "the top-left corner moved: {r1:?}");
+    assert!(r1.width() < r0.width() && r1.height() < r0.height(), "and the panel shrank: {r1:?}");
+    assert!((r1.right() - r0.right()).abs() < 1.0 && (r1.bottom() - r0.bottom()).abs() < 1.0, "the bottom-right is fixed");
+    // top-right: only the right edge moves
+    let tr = s.rect_of("vars-resize-tr");
+    s.drag(tr.center(), tr.center() - egui::vec2(60.0, 0.0));
+    let r2 = crate::variables::view::floating_rect(s.app(), screen);
+    assert!(r2.width() < r1.width() && (r2.left() - r1.left()).abs() < 1.0, "the left edge stayed: {r2:?}");
+    // bottom-left: only the left edge moves
+    let bl = s.rect_of("vars-resize-bl");
+    s.drag(bl.center(), bl.center() + egui::vec2(80.0, 0.0));
+    let r3 = crate::variables::view::floating_rect(s.app(), screen);
+    assert!(r3.width() < r2.width() && (r3.right() - r2.right()).abs() < 1.0, "the right edge stayed: {r3:?}");
+    // never below the minimum, from any corner
+    let tl = s.rect_of("vars-resize-tl");
+    s.drag(tl.center(), Pos2::new(1200.0, 1000.0));
     let size = s.app().vars.float_size.unwrap();
     assert_eq!((size.x, size.y), (theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H), "{size:?}");
 }
