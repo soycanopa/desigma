@@ -49,7 +49,7 @@ impl Sim {
         self.shapes = out.shapes;
     }
     fn app(&self) -> &App {
-        &self.shell.app
+        self.shell.peek()
     }
     fn screen(&self, x: f32, y: f32) -> Pos2 {
         self.app().view.to_screen(self.app().canvas_rect.min, DV::new(x, y))
@@ -107,7 +107,7 @@ impl Sim {
     }
     /// Scrolls the inspector to the bottom and redraws.
     fn scroll_inspector_down(&mut self) {
-        self.shell.app.props.scroll = 1.0e6;
+        self.shell.session().props.scroll = 1.0e6;
         self.frame(vec![]);
         self.frame(vec![]);
     }
@@ -117,6 +117,11 @@ impl Sim {
     fn count(&self) -> usize {
         self.app().doc.nodes.len()
     }
+}
+
+/// y of a point in the rail or the left panel, which now start under the custom title bar.
+fn top(y: f32) -> f32 {
+    theme::TITLE_BAR_H + y
 }
 
 #[test]
@@ -290,12 +295,12 @@ fn hand_tool_pans() {
 fn layers_panel_click_and_visibility_toggle() {
     let mut s = Sim::new();
     // first row (top-most layer = "Dashboard") of the layers list
-    s.click(Pos2::new(180.0, 241.0));
+    s.click(Pos2::new(180.0, top(241.0)));
     let dash = s.by_name("Dashboard");
     assert_eq!(s.app().selection, vec![dash]);
     // hover reveals the eye button at the row's right edge
-    s.mv(Pos2::new(180.0, 241.0));
-    s.click(Pos2::new(297.0 - 8.0 - 12.0 - 1.0, 241.0));
+    s.mv(Pos2::new(180.0, top(241.0)));
+    s.click(Pos2::new(297.0 - 8.0 - 12.0 - 1.0, top(241.0)));
     assert!(!s.app().doc.get(dash).unwrap().visible);
     s.cmd_key(Key::Z);
     assert!(s.app().doc.get(dash).unwrap().visible);
@@ -307,7 +312,7 @@ fn layers_drag_reparents_into_frame() {
     let welcome = s.by_name("Welcome");
     let card = s.by_name("Card");
     // rows: Dashboard (241), Card (273), Welcome (305). Drag Card onto the middle of Welcome.
-    s.drag(Pos2::new(180.0, 273.0), Pos2::new(180.0, 305.0));
+    s.drag(Pos2::new(180.0, top(273.0)), Pos2::new(180.0, top(305.0)));
     assert_eq!(s.app().doc.get(card).unwrap().parent, Some(welcome));
 }
 
@@ -315,10 +320,10 @@ fn layers_drag_reparents_into_frame() {
 fn page_add_and_switch() {
     let mut s = Sim::new();
     let n = s.app().doc.pages.len();
-    s.click(Pos2::new(277.0, 85.0));
+    s.click(Pos2::new(277.0, top(85.0)));
     assert_eq!(s.app().doc.pages.len(), n + 1);
     assert_eq!(s.app().page, *s.app().doc.pages.last().unwrap());
-    s.click(Pos2::new(150.0, 118.0));
+    s.click(Pos2::new(150.0, top(118.0)));
     assert_eq!(s.app().page, s.app().doc.pages[0]);
 }
 
@@ -338,7 +343,7 @@ fn inspector_x_field_edits_position() {
 #[test]
 fn rail_menu_opens_and_closes() {
     let mut s = Sim::new();
-    s.click(Pos2::new(28.0, 24.0));
+    s.click(Pos2::new(28.0, top(24.0)));
     assert_eq!(s.app().ui.menu, Some(MenuKind::Main));
     s.key(Key::Escape);
     assert_eq!(s.app().ui.menu, None);
@@ -401,13 +406,13 @@ fn page_context_menu_duplicates_and_deletes() {
     let mut s = Sim::new();
     let n = s.app().doc.pages.len();
     // second page row, then the menu opens at the pointer
-    s.right_click(Pos2::new(150.0, 141.0));
+    s.right_click(Pos2::new(150.0, top(141.0)));
     assert!(s.app().layers.page_menu.is_some());
-    s.click(Pos2::new(180.0, 141.0 + 4.0 + 24.0 + 12.0)); // Duplicate
+    s.click(Pos2::new(180.0, top(141.0) + 4.0 + 24.0 + 12.0)); // Duplicate
     assert_eq!(s.app().doc.pages.len(), n + 1);
     assert!(s.app().layers.page_menu.is_none());
-    s.right_click(Pos2::new(150.0, 118.0));
-    s.click(Pos2::new(180.0, 118.0 + 4.0 + 48.0 + 12.0)); // Delete
+    s.right_click(Pos2::new(150.0, top(118.0)));
+    s.click(Pos2::new(180.0, top(118.0) + 4.0 + 48.0 + 12.0)); // Delete
     assert_eq!(s.app().doc.pages.len(), n);
     s.cmd_key(Key::Z);
     assert_eq!(s.app().doc.pages.len(), n + 1);
@@ -417,8 +422,8 @@ fn page_context_menu_duplicates_and_deletes() {
 fn page_context_menu_rename() {
     let mut s = Sim::new();
     let pid = s.app().doc.pages[1];
-    s.right_click(Pos2::new(150.0, 141.0));
-    s.click(Pos2::new(180.0, 141.0 + 4.0 + 12.0)); // Rename
+    s.right_click(Pos2::new(150.0, top(141.0)));
+    s.click(Pos2::new(180.0, top(141.0) + 4.0 + 12.0)); // Rename
     assert_eq!(s.app().layers.renaming_page, Some(pid));
     s.frame(vec![]);
     s.type_text("Renamed");
@@ -433,7 +438,7 @@ fn dragging_a_page_row_reorders_it() {
     let mut s = Sim::new();
     let first = s.app().doc.pages[0];
     // drag page 1 below page 2 (slot 2)
-    s.drag(Pos2::new(150.0, 118.0), Pos2::new(150.0, 118.0 + 28.0));
+    s.drag(Pos2::new(150.0, top(118.0)), Pos2::new(150.0, top(118.0) + 28.0));
     assert_eq!(s.app().doc.pages[1], first);
     s.cmd_key(Key::Z);
     assert_eq!(s.app().doc.pages[0], first);
@@ -509,7 +514,7 @@ fn clicking_a_text_style_applies_it_to_text() {
 fn style_folders_collapse() {
     let mut s = Sim::new();
     // nothing selected: the Styles section is part of the page panel
-    s.shell.app.props.scroll = 0.0;
+    s.shell.session().props.scroll = 0.0;
     s.frame(vec![]);
     let r = s.rect_of("folder:Color styles/Brand");
     s.click(r.center());
@@ -542,7 +547,7 @@ fn editing_a_selection_color_replaces_it_everywhere() {
 fn rotating_a_multi_selection_with_the_handle() {
     let mut s = Sim::new();
     let (a, b) = (s.by_name("Tile A"), s.by_name("Tile B"));
-    s.shell.app.selection = vec![a, b];
+    s.shell.session().selection = vec![a, b];
     s.frame(vec![]);
     let (corners, _) = interact::selection_box(s.app()).unwrap();
     let br = s.app().view.to_screen(s.app().canvas_rect.min, corners[2]);
@@ -830,16 +835,17 @@ fn frame_guides_follow_the_frame_and_each_drag_is_one_undo_step() {
     // it moves with the frame, and snaps layers at its new place
     let mut moved = s.app().doc.get(card).unwrap().clone();
     moved.transform.tx += 100.0;
-    s.shell.app.hist.exec(&mut s.shell.app.doc, desigma_doc::Command::Update { node: Box::new(moved) }).unwrap();
+    let sess = s.shell.session();
+    sess.hist.exec(&mut sess.doc, desigma_doc::Command::Update { node: Box::new(moved) }).unwrap();
     let want = (bb.x + 30.4).round() + 100.0;
     let targets = crate::canvas::interact::snap_targets(s.app(), &[]);
     assert!(targets.iter().any(|r| crate::canvas::snap::is_guide_rect(r) && r.x == want), "frame guide followed the frame");
-    s.shell.app.changed();
+    s.shell.session().changed();
     s.frame(vec![]);
 
     // a guide dropped with nothing selected is a page guide
     let to2 = s.screen(bb.x - 200.0, bb.y - 150.0);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.drag(Pos2::new(cr.left() + 10.0, to2.y), to2);
     let g = s.app().doc.guides[&page].clone();
     assert_eq!(g.len(), 2);
@@ -898,10 +904,10 @@ fn view_toggles_via_shortcuts() {
     s.mods = Modifiers::NONE;
     assert!(s.app().ui.hide_layout_grids, "Ctrl+Shift+4 hides layout grids");
     // zoomed to 800% with every aid on renders without trouble
-    s.shell.app.ui.pixel_grid = true;
-    s.shell.app.ui.rulers = true;
-    s.shell.app.ui.hide_layout_grids = false;
-    s.shell.app.view.zoom = 8.0;
+    s.shell.session().ui.pixel_grid = true;
+    s.shell.session().ui.rulers = true;
+    s.shell.session().ui.hide_layout_grids = false;
+    s.shell.session().view.zoom = 8.0;
     s.frame(vec![]);
 }
 
@@ -911,7 +917,7 @@ fn layout_guide_section_edits_the_grids_of_a_frame() {
     let id = s.by_name("Card");
     assert!(s.app().doc.get(id).unwrap().kind.frame_props().is_some(), "Card is a frame");
     let grid = crate::panels::layoutguide::default_grid(1, Color::rgba(255, 0, 0, 26));
-    s.shell.app.edit_nodes(&[id], |n| {
+    s.shell.session().edit_nodes(&[id], |n| {
         if let Some(f) = n.kind.frame_props_mut() {
             f.grids.push(grid.clone());
         }
@@ -954,6 +960,7 @@ mod proto;
 mod proto_motion;
 mod proto_vars;
 mod svg;
+mod tabs;
 mod typography;
 mod variables;
 mod vector;

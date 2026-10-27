@@ -140,8 +140,7 @@ impl App {
     }
 
     pub fn new_deck_here(&mut self) {
-        let target = self.lib_file.as_ref().map(|f| (f.project_id.clone(), None));
-        self.new_library_deck(target);
+        self.open_tab = Some(crate::app::TabOpen::NewDeck);
     }
 
     fn new_library_file_of(&mut self, target: Option<(String, Option<String>)>, kind: DocumentKind) {
@@ -184,16 +183,14 @@ impl App {
         }
     }
 
-    /// File → New file: next to the open library file when there is one.
+    /// File → New file: a new tab next to the open library file (the Shell resolves it).
     pub fn new_file_here(&mut self) {
-        let target = self.lib_file.as_ref().map(|f| (f.project_id.clone(), None));
-        self.new_library_file(target);
+        self.open_tab = Some(crate::app::TabOpen::NewFile);
     }
 
-    /// File → New board: next to the open library file when there is one.
+    /// File → New board: a new tab next to the open library file.
     pub fn new_board_here(&mut self) {
-        let target = self.lib_file.as_ref().map(|f| (f.project_id.clone(), None));
-        self.new_library_board(target);
+        self.open_tab = Some(crate::app::TabOpen::NewBoard);
     }
 
     /// Writes the open library file (no toast); also refreshes its thumbnail.

@@ -19,6 +19,7 @@ pub enum Icon {
     Help,
     ChevronDown,
     ChevronRight,
+    House,
     Plus,
     Minus,
     Search,
@@ -274,6 +275,7 @@ impl Icon {
         Icon::Crosshair,
         Icon::Link,
         Icon::Unlink,
+        Icon::House,
     ];
 
     /// Name of the vendored Lucide icon that stands in for this one (None for the logo).
@@ -291,6 +293,7 @@ impl Icon {
             Icon::Tools => "wrench",
             Icon::Variables => "hexagon",
             Icon::Help => "circle-help",
+            Icon::House => "house",
             Icon::ChevronDown => "chevron-down",
             Icon::ChevronRight => "chevron-right",
             Icon::Plus => "plus",
@@ -502,6 +505,7 @@ lucide!(
     "play",
     "pipette",
     "x",
+    "house",
     "styles-dots",
     "blend",
     "circle-dot",
@@ -638,7 +642,7 @@ mod tests {
         for i in Icon::ALL {
             assert!(seen.insert(*i), "{i:?} listed twice");
         }
-        assert_eq!(seen.len(), 123);
+        assert_eq!(seen.len(), 124);
     }
 
     #[test]

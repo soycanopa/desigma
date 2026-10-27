@@ -8,7 +8,7 @@
 use crate::instance::{self, Open};
 use objc2::rc::Retained;
 use objc2::runtime::NSObject;
-use objc2::{declare_class, msg_send, msg_send_id, mutability, sel, ClassType, DeclaredClass};
+use objc2::{define_class, msg_send, sel, AnyThread};
 use objc2_foundation::{NSAppleEventDescriptor, NSAppleEventManager};
 use std::cell::RefCell;
 
@@ -21,31 +21,28 @@ const ODOC: u32 = u32::from_be_bytes(*b"odoc");
 const KEY_DIRECT_OBJECT: u32 = u32::from_be_bytes(*b"----");
 const TYPE_FILE_URL: u32 = u32::from_be_bytes(*b"furl");
 
-declare_class!(
+define_class!(
+    // SAFETY: The superclass NSObject does not have any subclassing requirements,
+    // and `AppleEventHandler` does not implement `Drop`.
+    #[unsafe(super(NSObject))]
+    #[thread_kind = AnyThread]
+    #[name = "DesigmaAppleEventHandler"]
     struct AppleEventHandler;
 
-    unsafe impl ClassType for AppleEventHandler {
-        type Super = NSObject;
-        type Mutability = mutability::InteriorMutable;
-        const NAME: &'static str = "DesigmaAppleEventHandler";
-    }
-
-    impl DeclaredClass for AppleEventHandler {}
-
-    unsafe impl AppleEventHandler {
-        #[method(handleURL:withReplyEvent:)]
+    impl AppleEventHandler {
+        #[unsafe(method(handleURL:withReplyEvent:))]
         fn handle_url(&self, event: &NSAppleEventDescriptor, _reply: &NSAppleEventDescriptor) {
-            if let Some(url) = direct_object(event).and_then(|d| unsafe { d.stringValue() }) {
+            if let Some(url) = direct_object(event).and_then(|d| d.stringValue()) {
                 instance::push(Open::Link(url.to_string()));
             }
         }
 
-        #[method(handleOpenDocuments:withReplyEvent:)]
+        #[unsafe(method(handleOpenDocuments:withReplyEvent:))]
         fn handle_open_documents(&self, event: &NSAppleEventDescriptor, _reply: &NSAppleEventDescriptor) {
             let Some(list) = direct_object(event) else { return };
             // the items of a list are 1-based
-            for i in 1..=unsafe { list.numberOfItems() } {
-                let item = unsafe { list.descriptorAtIndex(i) };
+            for i in 1..=list.numberOfItems() {
+                let item = list.descriptorAtIndex(i);
                 if let Some(path) = item.and_then(|d| file_path(&d)) {
                     instance::push(Open::File(path));
                 }
@@ -55,15 +52,15 @@ declare_class!(
 );
 
 fn direct_object(event: &NSAppleEventDescriptor) -> Option<Retained<NSAppleEventDescriptor>> {
-    unsafe { msg_send_id![event, paramDescriptorForKeyword: KEY_DIRECT_OBJECT] }
+    unsafe { msg_send![event, paramDescriptorForKeyword: KEY_DIRECT_OBJECT] }
 }
 
 /// The path of a file item (an alias or file reference in the event), through its file URL.
 fn file_path(item: &NSAppleEventDescriptor) -> Option<std::path::PathBuf> {
-    let url: Option<Retained<NSAppleEventDescriptor>> = unsafe { msg_send_id![item, coerceToDescriptorType: TYPE_FILE_URL] };
+    let url: Option<Retained<NSAppleEventDescriptor>> = unsafe { msg_send![item, coerceToDescriptorType: TYPE_FILE_URL] };
     let url = url?;
-    let data = unsafe { url.data() };
-    let text = std::str::from_utf8(data.bytes()).ok()?.trim_end_matches('\0');
+    let bytes = url.data().to_vec();
+    let text = std::str::from_utf8(&bytes).ok()?.trim_end_matches('\0');
     url::Url::parse(text).ok()?.to_file_path().ok()
 }
 
@@ -78,7 +75,7 @@ pub fn register() {
         let mut slot = slot.borrow_mut();
         let handler = slot.get_or_insert_with(|| {
             let this = AppleEventHandler::alloc().set_ivars(());
-            unsafe { msg_send_id![super(this), init] }
+            unsafe { msg_send![super(this), init] }
         });
         unsafe {
             let manager = NSAppleEventManager::sharedAppleEventManager();

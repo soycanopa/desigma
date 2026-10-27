@@ -48,7 +48,7 @@ fn double_click(s: &mut Sim, p: Pos2) {
 
 fn run_action(s: &mut Sim, a: crate::panels::menus::Action) {
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, a);
+    crate::panels::menus::run(s.shell.session(), &ctx, a);
 }
 
 fn file_id(s: &Sim, name: &str) -> String {
@@ -57,7 +57,7 @@ fn file_id(s: &Sim, name: &str) -> String {
 
 fn open(s: &mut Sim, name: &str) {
     let id = file_id(s, name);
-    crate::home::apply(&mut s.shell.app, Act::Open(id));
+    crate::home::apply(s.shell.session(), Act::Open(id));
     s.frame(vec![]);
     s.frame(vec![]);
 }
@@ -152,7 +152,7 @@ fn renaming_in_the_header_persists_to_the_library() {
 fn renaming_a_file_from_the_home_dialog_persists() {
     let (mut s, _d) = home_sim();
     let id = file_id(&s, "Welcome");
-    crate::home::apply(&mut s.shell.app, Act::RenameFile(id.clone()));
+    crate::home::apply(s.shell.session(), Act::RenameFile(id.clone()));
     s.frame(vec![]);
     s.frame(vec![]);
     assert!(matches!(s.app().dialog.as_ref().map(|d| &d.intent), Some(Intent::RenameFile(_))));
@@ -194,7 +194,7 @@ fn right_click_menu_moves_a_file_to_the_trash_and_trash_restores_it() {
 fn emptying_the_trash_needs_a_confirmation() {
     let (mut s, _d) = home_sim();
     let id = file_id(&s, "Welcome");
-    crate::home::apply(&mut s.shell.app, Act::Trash(id));
+    crate::home::apply(s.shell.session(), Act::Trash(id));
     s.frame(vec![]);
     click_rect(&mut s, "home-trash");
     s.frame(vec![]);
@@ -222,7 +222,7 @@ fn dragging_a_card_onto_a_project_moves_the_file() {
     let (mut s, _d) = home_sim();
     let l = lib(&s);
     let other = l.create_project("Marketing").unwrap();
-    s.shell.app.home.as_mut().unwrap().dirty = true;
+    s.shell.session().home.as_mut().unwrap().dirty = true;
     s.frame(vec![]);
     s.frame(vec![]);
     let from = s.rect_of("home-card-Welcome").center();
@@ -233,7 +233,7 @@ fn dragging_a_card_onto_a_project_moves_the_file() {
     assert_eq!(f.project, other.id);
     // and into a folder via the action used by the folder rows
     let folder = l.create_folder(&other.id, None, "Q4").unwrap();
-    crate::home::apply(&mut s.shell.app, Act::Drop(f.id.clone(), DropTo::Folder(other.id.clone(), folder.id.clone())));
+    crate::home::apply(s.shell.session(), Act::Drop(f.id.clone(), DropTo::Folder(other.id.clone(), folder.id.clone())));
     assert_eq!(l.file(&f.id).unwrap().folder.as_deref(), Some(folder.id.as_str()));
 }
 
@@ -244,9 +244,9 @@ fn search_filters_files_and_the_sidebar_navigates_sections() {
     let p = l.list_projects()[0].id.clone();
     let doc = Document::new("x");
     l.create_file(&p, None, "Checkout flow", &doc).unwrap();
-    s.shell.app.home.as_mut().unwrap().dirty = true;
+    s.shell.session().home.as_mut().unwrap().dirty = true;
     s.frame(vec![]);
-    s.shell.app.home.as_mut().unwrap().search = "check".into();
+    s.shell.session().home.as_mut().unwrap().search = "check".into();
     s.frame(vec![]);
     let files = s.app().home.as_ref().unwrap().files();
     assert_eq!(files.len(), 1);
@@ -317,7 +317,7 @@ fn unchanged_documents_are_never_rewritten_by_autosave() {
     let id = s.app().lib_file.as_ref().unwrap().id.clone();
     let m0 = lib(&s).file(&id).unwrap().modified;
     // zooming bumps the canvas revision but changes nothing in the document
-    s.shell.app.zoom_to(2.0);
+    s.shell.session().zoom_to(2.0);
     wait(&mut s, 3.0);
     assert_eq!(lib(&s).file(&id).unwrap().modified, m0);
     assert_eq!(s.app().autosave.saves, 0);
@@ -352,7 +352,7 @@ fn importing_a_file_adds_it_to_the_project() {
     let svg = d.0.join("logo.svg");
     std::fs::write(&svg, r##"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#f00"/></svg>"##).unwrap();
     let p = lib(&s).list_projects()[0].id.clone();
-    assert_eq!(s.shell.app.import_into_library(&[svg], &p, None), 1);
+    assert_eq!(s.shell.session().import_into_library(&[svg], &p, None), 1);
     s.frame(vec![]);
     s.frame(vec![]);
     assert!(s.app().home.as_ref().unwrap().snap.files.iter().any(|f| f.name == "logo"));

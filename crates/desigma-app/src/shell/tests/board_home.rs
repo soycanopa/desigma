@@ -46,10 +46,11 @@ fn home_creates_boards_separately_from_design_files_and_marks_them() {
     s.click(at);
     s.type_text("hello");
     s.key(Key::Escape);
-    s.shell.app.save_library_file().unwrap();
-    s.shell.app.go_home();
+    s.shell.session().save_library_file().unwrap();
+    // the title-bar home button parks the board as a tab and shows the file browser
+    s.click(s.rect_of("titlebar-home").center());
     s.frame(vec![]);
-    s.frame(vec![]);
+    assert!(s.shell.showing_home());
     // the card of the board carries the board marker
     let _ = s.rect_of("home-kind-board");
     // a design file from the other button
@@ -79,16 +80,18 @@ fn boards_get_a_thumbnail_of_the_whole_page_on_the_dotted_canvas() {
 fn file_menu_offers_new_board() {
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, crate::panels::menus::Action::NewBoard);
-    assert!(s.app().is_board(), "File > New board opens an empty board");
-    assert_eq!(s.app().tool, Tool::Move);
+    crate::panels::menus::run(s.shell.session(), &ctx, crate::panels::menus::Action::NewBoard);
     s.frame(vec![]);
+    assert!(s.app().is_board(), "File > New board opens an empty board tab");
+    assert_eq!(s.app().tool, Tool::Move);
+    assert_eq!(s.shell.tab_count(), 2, "the board is its own tab");
     // and a design tool picked before does not leak into the board
     let mut d = Sim::new();
     d.key(Key::R);
     assert_eq!(d.app().tool, Tool::Rectangle);
     let ctx = d.ctx.clone();
-    crate::panels::menus::run(&mut d.shell.app, &ctx, crate::panels::menus::Action::NewBoard);
+    crate::panels::menus::run(d.shell.session(), &ctx, crate::panels::menus::Action::NewBoard);
+    d.frame(vec![]);
     assert_eq!(d.app().tool, Tool::Move);
 }
 

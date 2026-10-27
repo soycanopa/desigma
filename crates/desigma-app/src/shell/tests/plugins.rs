@@ -3,9 +3,9 @@ use super::*;
 #[test]
 fn plugin_install_form_rejects_figma_links_and_blocks_editor_shortcuts() {
     let mut s = Sim::with(Options { select: Some("Card".into()), ..Default::default() });
-    s.shell.app.plugins.root = Some(std::env::temp_dir().join("desigma-plugin-ui-empty"));
+    s.shell.session().plugins.root = Some(std::env::temp_dir().join("desigma-plugin-ui-empty"));
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, crate::panels::menus::Action::Plugins);
+    crate::panels::menus::run(s.shell.session(), &ctx, crate::panels::menus::Action::Plugins);
     s.frame(vec![]);
     s.frame(vec![]);
     let before = s.app().doc.to_json().unwrap();
@@ -31,7 +31,7 @@ fn plugin_install_form_rejects_figma_links_and_blocks_editor_shortcuts() {
 fn plugins_rail_opens_library() {
     let mut s = Sim::new();
     let i = crate::panels::rail::ITEMS.iter().position(|(item, ..)| *item == crate::app::RailItem::Plugins).unwrap();
-    let y = crate::panels::rail::cell_tops()[i] + 24.0;
+    let y = theme::TITLE_BAR_H + crate::panels::rail::cell_tops()[i] + 24.0;
     s.click(Pos2::new(24.0, y));
     assert!(s.app().plugins.open);
     s.frame(vec![]);
@@ -48,7 +48,7 @@ fn plugin_svg_inserts_selected_named_geometry_as_one_undo_step() {
     before.as_object_mut().unwrap().remove("next_id");
     let count = s.app().doc.nodes.len();
     let previous_history = s.app().hist.can_undo();
-    let id = s.shell.app.insert_plugin_svg(PLUGIN_TEST_SVG, "Library icon").unwrap();
+    let id = s.shell.session().insert_plugin_svg(PLUGIN_TEST_SVG, "Library icon").unwrap();
     assert_eq!(s.app().selection.len(), 1);
     let selected = s.app().selection[0];
     assert_eq!(id, selected.0.to_string());
@@ -82,22 +82,22 @@ fn rejected_plugin_svg_preserves_document_selection_and_history() {
         r#"<svg xmlns="http://www.w3.org/2000/svg"><image href="https://example.com/photo.png"/></svg>"#,
         r#"<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>"#,
     ] {
-        assert!(s.shell.app.insert_plugin_svg(svg, "Rejected").is_err());
+        assert!(s.shell.session().insert_plugin_svg(svg, "Rejected").is_err());
         assert_eq!(s.app().doc.to_json().unwrap(), before);
         assert_eq!(s.app().selection, selection);
         assert_eq!(s.app().hist.can_undo(), undo);
     }
-    assert!(s.shell.app.insert_plugin_svg(PLUGIN_TEST_SVG, "\n").is_err());
+    assert!(s.shell.session().insert_plugin_svg(PLUGIN_TEST_SVG, "\n").is_err());
     assert_eq!(s.app().doc.to_json().unwrap(), before);
 }
 
 #[test]
 fn plugin_insertion_is_blocked_during_presentation() {
     let mut s = Sim::new();
-    s.shell.app.start_present();
+    s.shell.session().start_present();
     assert!(s.app().proto.present.is_some());
     let before = s.app().doc.to_json().unwrap();
-    assert!(s.shell.app.insert_plugin_svg(PLUGIN_TEST_SVG, "Hidden mutation").is_err());
+    assert!(s.shell.session().insert_plugin_svg(PLUGIN_TEST_SVG, "Hidden mutation").is_err());
     assert_eq!(s.app().doc.to_json().unwrap(), before);
 }
 
@@ -133,8 +133,8 @@ fn plugin_runtime_fixture(s: &mut Sim) -> String {
     };
     let runtime = Runtime::start(bundle, s.ctx.clone()).unwrap();
     let url = runtime.url().to_string();
-    s.shell.app.plugins.runtime = Some(runtime);
-    s.shell.app.plugins.running_id = Some("integration-icons".into());
+    s.shell.session().plugins.runtime = Some(runtime);
+    s.shell.session().plugins.running_id = Some("integration-icons".into());
     url
 }
 
@@ -178,7 +178,7 @@ fn plugin_loopback_request_inserts_in_editor_and_stop_revokes_session() {
     assert_eq!(response["node_id"], s.app().selection[0].0.to_string());
     assert_eq!(s.app().doc.nodes.len(), before + 2);
     assert_eq!(s.app().doc.get(s.app().selection[0]).unwrap().name, "HTTP icon");
-    s.shell.app.stop_plugin();
+    s.shell.session().stop_plugin();
     assert!(s.app().plugins.runtime.is_none());
     assert!(s.app().plugins.running_id.is_none());
     assert!(plugin_http_insert(&url).is_err());
@@ -189,7 +189,7 @@ fn plugin_loopback_request_inserts_in_editor_and_stop_revokes_session() {
 fn switching_document_revokes_plugin_session() {
     let mut s = Sim::new();
     let url = plugin_runtime_fixture(&mut s);
-    s.shell.app.new_document();
+    s.shell.session().new_document();
     assert!(s.app().plugins.runtime.is_none());
     assert!(s.app().plugins.running_id.is_none());
     let before = s.app().doc.to_json().unwrap();

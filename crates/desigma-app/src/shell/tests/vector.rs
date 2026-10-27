@@ -13,13 +13,13 @@ fn add_shape(s: &mut Sim, mut n: Node, name: &str, c: Color) -> NodeId {
     n.name = name.into();
     n.fills = vec![Paint::solid(c)];
     let page = s.app().page;
-    let id = s.shell.app.doc.insert(page, n).unwrap();
-    s.shell.app.changed();
+    let id = s.shell.session().doc.insert(page, n).unwrap();
+    s.shell.session().changed();
     id
 }
 
 fn add_rect(s: &mut Sim, name: &str, x: f32, y: f32, w: f32, h: f32) -> NodeId {
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     add_shape(s, Node::rectangle(id, DRect::new(x, y, w, h)), name, Color::rgb(0x40, 0x90, 0xF0))
 }
 
@@ -61,7 +61,7 @@ fn builder_sim() -> (Sim, NodeId, NodeId) {
     let mut s = Sim::new();
     let a = add_rect(&mut s, "A", 300.0, 800.0, 200.0, 150.0);
     let b = add_rect(&mut s, "B", 400.0, 850.0, 200.0, 150.0);
-    s.shell.app.selection = vec![a, b];
+    s.shell.session().selection = vec![a, b];
     s.frame(vec![]);
     press_key_with(&mut s, Modifiers::SHIFT, Key::M);
     assert_eq!(s.app().tool, Tool::ShapeBuilder);
@@ -72,7 +72,7 @@ fn builder_sim() -> (Sim, NodeId, NodeId) {
 fn the_shape_builder_needs_overlapping_shapes_selected() {
     let mut s = Sim::new();
     let a = add_rect(&mut s, "A", 300.0, 800.0, 200.0, 150.0);
-    s.shell.app.selection = vec![a];
+    s.shell.session().selection = vec![a];
     press_key_with(&mut s, Modifiers::SHIFT, Key::M);
     assert_eq!(s.app().tool, Tool::Move, "one shape is not enough");
     assert!(s.app().canvas.builder.is_none());
@@ -166,7 +166,7 @@ fn leaving_without_edits_keeps_the_shapes_and_switching_tools_commits() {
     assert!(s.app().doc.get(a).is_some() && s.app().doc.get(b).is_some(), "nothing changed");
     assert!(!s.app().hist.can_undo());
     // Escape while brushing only drops the brush; the second one applies
-    s.shell.app.selection = vec![a, b];
+    s.shell.session().selection = vec![a, b];
     press_key_with(&mut s, Modifiers::SHIFT, Key::M);
     s.click(at(&s, 450.0, 900.0));
     s.key(Key::V);
@@ -441,7 +441,7 @@ fn join_closes_two_selected_endpoints_with_ctrl_j() {
     // select both ends of the open path with a marquee over the first and last vertex
     let mut sel = BTreeSet::new();
     sel.extend([0usize, 2]);
-    s.shell.app.canvas.vedit.as_mut().unwrap().sel = sel;
+    s.shell.session().canvas.vedit.as_mut().unwrap().sel = sel;
     press_key_with(&mut s, Modifiers::COMMAND, Key::J);
     let net = network(&s, id);
     assert_eq!(net.vertices.len(), 2, "the two ends merged into one");
@@ -477,8 +477,8 @@ fn double_clicking_inside_a_group_selects_the_child_before_editing_it() {
     let mut s = Sim::new();
     let a = add_rect(&mut s, "In group", 300.0, 800.0, 200.0, 150.0);
     let b = add_rect(&mut s, "Other", 560.0, 800.0, 100.0, 150.0);
-    s.shell.app.selection = vec![a, b];
-    s.shell.app.group_selection(false);
+    s.shell.session().selection = vec![a, b];
+    s.shell.session().group_selection(false);
     let p = at(&s, 400.0, 880.0);
     s.click(p);
     assert_ne!(s.app().selection, vec![a], "the first click selects the group");
@@ -495,9 +495,9 @@ fn flatten_merges_a_boolean_group_into_one_vector() {
     let mut s = Sim::new();
     let a = add_rect(&mut s, "A", 300.0, 800.0, 100.0, 100.0);
     let b = add_rect(&mut s, "B", 350.0, 850.0, 100.0, 100.0);
-    s.shell.app.selection = vec![a, b];
+    s.shell.session().selection = vec![a, b];
     let ctx = s.ctx.clone();
-    menus::run(&mut s.shell.app, &ctx, Action::Boolean(BooleanOp::Subtract));
+    menus::run(s.shell.session(), &ctx, Action::Boolean(BooleanOp::Subtract));
     let g = s.app().selection[0];
     assert!(matches!(s.app().doc.get(g).unwrap().kind, NodeKind::BooleanOp(BooleanOp::Subtract)));
     assert!(s.app().doc.get(a).unwrap().parent == Some(g), "the layers moved into the group");
@@ -517,16 +517,16 @@ fn editing_a_child_of_a_boolean_group_in_place_then_flattening() {
     let mut s = Sim::new();
     let a = add_rect(&mut s, "A", 300.0, 800.0, 100.0, 100.0);
     let b = add_rect(&mut s, "B", 350.0, 850.0, 100.0, 100.0);
-    s.shell.app.selection = vec![a, b];
+    s.shell.session().selection = vec![a, b];
     let ctx = s.ctx.clone();
-    menus::run(&mut s.shell.app, &ctx, Action::Boolean(BooleanOp::Subtract));
+    menus::run(s.shell.session(), &ctx, Action::Boolean(BooleanOp::Subtract));
     let g = s.app().selection[0];
     // step into the group and edit the first child's corner
-    s.shell.app.select_only(a);
+    s.shell.session().select_only(a);
     s.key(Key::Enter);
     assert_eq!(s.app().canvas.vedit.as_ref().map(|v| v.id), Some(a), "the child is edited in place");
-    s.shell.app.canvas.vedit.as_mut().unwrap().sel = BTreeSet::from([2]);
-    crate::canvas::vector::nudge(&mut s.shell.app, DV::new(40.0, 40.0));
+    s.shell.session().canvas.vedit.as_mut().unwrap().sel = BTreeSet::from([2]);
+    crate::canvas::vector::nudge(s.shell.session(), DV::new(40.0, 40.0));
     s.key(Key::Escape);
     assert!(matches!(s.app().doc.get(a).unwrap().kind, NodeKind::Vector { .. }), "the rectangle became a vector");
     assert_eq!(s.app().doc.get(a).unwrap().parent, Some(g), "still inside the group");
@@ -537,7 +537,7 @@ fn editing_a_child_of_a_boolean_group_in_place_then_flattening() {
     let mut b_shape = paths_to_shapes(&node_paths(doc, doc.get(b).unwrap()).unwrap(), 0.02);
     transform_shapes(&mut b_shape, &doc.world_transform(b));
     let expect: f64 = arrange(&[a_shape, b_shape]).iter().filter(|c| c.members == vec![0]).map(|c| c.area).sum();
-    s.shell.app.selection = vec![g];
+    s.shell.session().selection = vec![g];
     press_key_with(&mut s, Modifiers::COMMAND, Key::E);
     let vs = vectors(&s);
     assert_eq!(vs.len(), 1);
@@ -550,15 +550,15 @@ fn editing_a_child_of_a_boolean_group_in_place_then_flattening() {
 #[test]
 fn outline_stroke_turns_the_stroke_into_a_filled_vector() {
     let mut s = Sim::new();
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     let mut n = Node::rectangle(id, DRect::new(300.0, 800.0, 100.0, 50.0));
     n.fills.clear();
     n.stroke.paints = vec![Paint::solid(Color::rgb(0xFF, 0x00, 0x00))];
     n.stroke.weight = 10.0;
     n.stroke.align = StrokeAlign::Center;
     let page = s.app().page;
-    let id = s.shell.app.doc.insert(page, n).unwrap();
-    s.shell.app.selection = vec![id];
+    let id = s.shell.session().doc.insert(page, n).unwrap();
+    s.shell.session().selection = vec![id];
     press_key_with(&mut s, Modifiers::COMMAND | Modifiers::ALT, Key::O);
     let vs = vectors(&s);
     assert_eq!(vs.len(), 1);
@@ -574,14 +574,14 @@ fn outline_stroke_turns_the_stroke_into_a_filled_vector() {
 #[test]
 fn outline_stroke_keeps_a_filled_shape_and_adds_the_outline_above() {
     let mut s = Sim::new();
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     let mut n = Node::rectangle(id, DRect::new(300.0, 800.0, 100.0, 50.0));
     n.stroke.paints = vec![Paint::solid(Color::BLACK)];
     n.stroke.weight = 4.0;
     n.stroke.align = StrokeAlign::Inside;
     let page = s.app().page;
-    let id = s.shell.app.doc.insert(page, n).unwrap();
-    s.shell.app.selection = vec![id];
+    let id = s.shell.session().doc.insert(page, n).unwrap();
+    s.shell.session().selection = vec![id];
     press_key_with(&mut s, Modifiers::COMMAND | Modifiers::ALT, Key::O);
     let kept = s.app().doc.get(id).unwrap();
     assert!(kept.stroke.paints.is_empty() && !kept.fills.is_empty(), "the shape keeps its fill");
@@ -597,8 +597,8 @@ fn outline_stroke_keeps_a_filled_shape_and_adds_the_outline_above() {
 fn flatten_a_single_vector_bakes_its_corner_radii() {
     let (mut s, id) = sim_with_vector();
     s.key(Key::Enter);
-    s.shell.app.canvas.vedit.as_mut().unwrap().sel = BTreeSet::from([1]);
-    crate::canvas::vector::set_vertices(&mut s.shell.app, |v| v.corner_radius = 12.0);
+    s.shell.session().canvas.vedit.as_mut().unwrap().sel = BTreeSet::from([1]);
+    crate::canvas::vector::set_vertices(s.shell.session(), |v| v.corner_radius = 12.0);
     s.key(Key::Escape);
     press_key_with(&mut s, Modifiers::COMMAND, Key::E);
     let vs = vectors(&s);
@@ -624,12 +624,12 @@ fn simplify_path_from_the_menu_removes_nodes() {
             .collect(),
         fill_rule: desigma_doc::FillRule::NonZero,
     }];
-    if let Some(n) = s.shell.app.doc.get_mut(id) {
+    if let Some(n) = s.shell.session().doc.get_mut(id) {
         n.kind = NodeKind::Vector { paths: dense, network: None };
     }
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     let ctx = s.ctx.clone();
-    menus::run(&mut s.shell.app, &ctx, Action::VectorSimplify);
+    menus::run(s.shell.session(), &ctx, Action::VectorSimplify);
     let net = network(&s, id);
     assert!(net.vertices.len() < 20, "{}", net.vertices.len());
 }

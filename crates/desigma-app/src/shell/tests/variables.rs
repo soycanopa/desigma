@@ -72,7 +72,7 @@ fn switching_the_card_to_dark_changes_rendered_pixels() {
 /// Top of the Variables rail cell, looked up so rail changes don't break the tests.
 fn variables_rail_top() -> f32 {
     let i = rail::ITEMS.iter().position(|(item, ..)| *item == crate::app::RailItem::Variables).expect("Variables rail item");
-    rail::cell_tops()[i]
+    theme::TITLE_BAR_H + rail::cell_tops()[i]
 }
 
 /// Opens the variables view with the rail item: it starts as the floating panel; `full` expands it.
@@ -119,13 +119,73 @@ fn rail_opens_floating_panel_then_full_view_and_back() {
 }
 
 #[test]
-fn floating_panel_drags_by_its_header() {
+fn floating_panel_opens_centered_and_drags_by_its_header() {
     let mut s = Sim::new();
     open_view(&mut s, false);
     assert!(s.app().vars.float_pos.is_none());
-    s.drag(Pos2::new(110.0, 28.0), Pos2::new(190.0, 108.0));
+    // the default panel is a centered 800x580 modal
+    let screen = s.ctx.content_rect();
+    let r = crate::variables::view::floating_rect(s.app(), screen);
+    assert_eq!(r.size(), egui::vec2(theme::VAR_FLOAT_W, theme::VAR_FLOAT_H));
+    assert!((r.center().x - screen.center().x).abs() < 1.0 && (r.center().y - screen.center().y).abs() < 1.0, "{r:?}");
+    s.drag(Pos2::new(r.left() + 110.0, r.top() + 28.0), Pos2::new(r.left() + 190.0, r.top() + 108.0));
     let p = s.app().vars.float_pos.expect("moved");
-    assert!(p.x > 60.0 && p.y > 60.0, "{p:?}");
+    assert!(p.x > r.left() + 60.0 && p.y > r.top() + 60.0, "{p:?}");
+}
+
+#[test]
+fn floating_panel_resizes_from_its_corner_grip() {
+    let mut s = Sim::new();
+    open_view(&mut s, false);
+    assert!(s.app().vars.float_size.is_none(), "starts at the default size");
+    let screen = s.ctx.content_rect();
+    let before = crate::variables::view::floating_rect(s.app(), screen);
+    let grip = s.rect_of("vars-resize");
+    s.drag(grip.center(), grip.center() + egui::vec2(158.0, 120.0));
+    let size = s.app().vars.float_size.expect("resized");
+    assert!(size.x > before.width() && size.y > before.height(), "{size:?} vs {before:?}");
+    // the opposite corner stays put: the top-left never moves
+    let pos = s.app().vars.float_pos.expect("set by the resize");
+    assert_eq!((pos.x, pos.y), (before.left(), before.top()), "the dragged corner's opposite edges are fixed");
+    // the grip follows the new corner
+    s.frame(vec![]);
+    let grown = s.rect_of("vars-resize");
+    assert!(grown.right() > grip.right() && grown.bottom() > grip.bottom(), "the grip followed the new corner");
+    // dragging far inward clamps at the minimum instead of collapsing the panel
+    let grip = s.rect_of("vars-resize");
+    s.drag(grip.center(), Pos2::new(60.0, 60.0));
+    let size = s.app().vars.float_size.unwrap();
+    assert_eq!((size.x, size.y), (theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H), "{size:?}");
+}
+
+#[test]
+fn floating_panel_resizes_from_every_corner() {
+    let mut s = Sim::new();
+    open_view(&mut s, false);
+    let screen = s.ctx.content_rect();
+    // top-left: both edges move, the bottom-right corner stays fixed
+    let r0 = crate::variables::view::floating_rect(s.app(), screen);
+    let tl = s.rect_of("vars-resize-tl");
+    s.drag(tl.center(), tl.center() + egui::vec2(120.0, 90.0));
+    let r1 = crate::variables::view::floating_rect(s.app(), screen);
+    assert!(r1.left() > r0.left() && r1.top() > r0.top(), "the top-left corner moved: {r1:?}");
+    assert!(r1.width() < r0.width() && r1.height() < r0.height(), "and the panel shrank: {r1:?}");
+    assert!((r1.right() - r0.right()).abs() < 1.0 && (r1.bottom() - r0.bottom()).abs() < 1.0, "the bottom-right is fixed");
+    // top-right: only the right edge moves
+    let tr = s.rect_of("vars-resize-tr");
+    s.drag(tr.center(), tr.center() - egui::vec2(60.0, 0.0));
+    let r2 = crate::variables::view::floating_rect(s.app(), screen);
+    assert!(r2.width() < r1.width() && (r2.left() - r1.left()).abs() < 1.0, "the left edge stayed: {r2:?}");
+    // bottom-left: only the left edge moves
+    let bl = s.rect_of("vars-resize-bl");
+    s.drag(bl.center(), bl.center() + egui::vec2(80.0, 0.0));
+    let r3 = crate::variables::view::floating_rect(s.app(), screen);
+    assert!(r3.width() < r2.width() && (r3.right() - r2.right()).abs() < 1.0, "the right edge stayed: {r3:?}");
+    // never below the minimum, from any corner
+    let tl = s.rect_of("vars-resize-tl");
+    s.drag(tl.center(), Pos2::new(1200.0, 1000.0));
+    let size = s.app().vars.float_size.unwrap();
+    assert_eq!((size.x, size.y), (theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H), "{size:?}");
 }
 
 #[test]
@@ -159,7 +219,7 @@ fn create_variable_menu_adds_a_typed_variable() {
     let v = s.app().doc.variables.values().find(|v| v.name == "Number").expect("new Number variable");
     assert_eq!(v.kind, VariableKind::Number);
     assert_eq!(v.values.len(), 2, "one value per mode");
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(s.app().doc.variables.len(), before);
 }
 
@@ -230,7 +290,7 @@ fn numeric_fields_bind_and_unbind() {
     let (c, light, _) = theme_ids(s.app());
     let w = store.add_variable(&c, "Size/Wide", VariableKind::Number).unwrap();
     store.set_value(&w, &light, VariableValue::Number(222.0));
-    s.shell.app.commit_store(store, &[], &[]);
+    s.shell.session().commit_store(store, &[], &[]);
     s.frame(vec![]);
     let field = s.field_rect("w");
     s.mv(field.center());
@@ -259,8 +319,8 @@ fn enter_renames_the_selected_row_keeping_its_group() {
     let m = s.rect_of("vars-mode:Dark");
     s.click(Pos2::new(m.left() + 20.0, m.center().y));
     // double click renames a mode; here the header only selects, so use the app state directly
-    s.shell.app.vars.renaming = Some(('m', theme_ids(s.app()).2));
-    s.shell.app.vars.rename_frames = 0;
+    s.shell.session().vars.renaming = Some(('m', theme_ids(s.app()).2));
+    s.shell.session().vars.rename_frames = 0;
     s.frame(vec![]);
     s.type_text("Night");
     s.key(Key::Enter);
@@ -305,7 +365,7 @@ fn delete_and_ctrl_d_work_on_the_selection_in_single_undo_steps() {
     s.key(Key::Delete);
     assert!(!s.app().doc.variables.contains_key(&ink));
     assert!(!s.app().doc.get(title).unwrap().variables.bindings.contains_key("fills/0"));
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert!(s.app().doc.variables.contains_key(&ink));
     assert_eq!(s.app().doc.get(title).unwrap().variables.bindings["fills/0"], ink);
 }
@@ -325,7 +385,7 @@ fn row_menu_has_figmas_items_and_deletes() {
     s.key(Key::Enter);
     s.frame(vec![]);
     assert!(!s.app().doc.variables.contains_key(&ink));
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert!(s.app().doc.variables.contains_key(&ink));
 }
 
@@ -406,7 +466,7 @@ fn dragging_a_row_reorders_and_drops_into_groups() {
     s.drag(Pos2::new(from.left() + 120.0, from.center().y), Pos2::new(target.left() + 120.0, target.top() + 4.0));
     let after = row_order(&s);
     assert!(pos(&after, "Text/Secondary") < pos(&after, "Text/Primary"), "{after:?}");
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(row_order(&s), before);
 
     // onto another group's header row: the variable joins that group
@@ -415,7 +475,7 @@ fn dragging_a_row_reorders_and_drops_into_groups() {
     let hdr = s.rect_of("vars-header:Surface");
     s.drag(Pos2::new(from.left() + 120.0, from.center().y), hdr.center());
     assert!(s.app().doc.variables.values().any(|v| v.name == "Surface/Secondary"), "{:?}", row_order(&s));
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(row_order(&s), before);
 }
 
@@ -468,7 +528,7 @@ fn text_fill_edits_only_the_selected_range_and_binds_the_layer() {
     s.type_text("plain");
     let id = s.app().selection[0];
     s.key(Key::Escape);
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     s.scroll_inspector_down();
     let sw = s.rect_of("text-sw");
     s.mv(Pos2::new(sw.right() + 40.0, sw.center().y));

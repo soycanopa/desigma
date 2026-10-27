@@ -117,8 +117,8 @@ fn options_change_what_is_found() {
 fn replace_one_replaces_the_current_result_and_advances() {
     let mut s = Sim::new();
     open_find(&mut s, "quarter");
-    s.shell.app.find.show_replace = true;
-    s.shell.app.find.replacement = "term".into();
+    s.shell.session().find.show_replace = true;
+    s.shell.session().find.replacement = "term".into();
     s.frame(vec![]);
     s.key(Key::Enter); // first result
     let first = s.app().find.results[0].node;
@@ -141,7 +141,7 @@ fn find_can_search_all_pages_and_layer_names() {
     assert!(s.app().find.results.len() > here, "{} vs {here}", s.app().find.results.len());
     let comp_page = s.app().doc.pages[1];
     let on_other = s.app().find.results.iter().position(|m| s.app().doc.page_of(m.node) == Some(comp_page)).expect("a hit on the Components page");
-    s.shell.app.find_goto(on_other);
+    s.shell.session().find_goto(on_other);
     assert_eq!(s.app().page, comp_page, "navigating switches page");
 }
 
@@ -212,16 +212,18 @@ fn select_same_fill_from_the_palette_picks_matching_layers_on_the_page() {
 fn select_same_font_stroke_and_instance_actions() {
     let mut s = Sim::with(Options { select: Some("Welcome back".into()), ..Default::default() });
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, Action::SelectSame(MatchCriteria::Font));
+    crate::panels::menus::run(s.shell.session(), &ctx, Action::SelectSame(MatchCriteria::Font));
     // Only the heading uses 32px / 700.
     assert_eq!(s.app().selection, vec![s.by_name("Welcome back")]);
     // Stroke: the Avatar has the only stroke on the page.
-    s.shell.app.select_only(s.by_name("Avatar"));
-    crate::panels::menus::run(&mut s.shell.app, &ctx, Action::SelectSame(MatchCriteria::Stroke));
+    let id = s.by_name("Avatar");
+    s.shell.session().select_only(id);
+    crate::panels::menus::run(s.shell.session(), &ctx, Action::SelectSame(MatchCriteria::Stroke));
     assert_eq!(s.app().selection, vec![s.by_name("Avatar")]);
     // Instances of the Primary button.
-    s.shell.app.select_only(s.by_name("Get started"));
-    crate::panels::menus::run(&mut s.shell.app, &ctx, Action::SelectSame(MatchCriteria::Instance));
+    let id = s.by_name("Get started");
+    s.shell.session().select_only(id);
+    crate::panels::menus::run(s.shell.session(), &ctx, Action::SelectSame(MatchCriteria::Instance));
     let mut sel = s.app().selection.clone();
     sel.sort();
     let mut want = vec![s.by_name("Get started"), s.by_name("Learn more")];
@@ -233,10 +235,10 @@ fn select_same_font_stroke_and_instance_actions() {
 fn ctrl_alt_a_selects_matching_layers() {
     let mut s = Sim::with(Options { select: Some("Tile A".into()), ..Default::default() });
     let tile_a = s.by_name("Tile A");
-    s.shell.app.duplicate_selection();
+    s.shell.session().duplicate_selection();
     let copy = s.app().selection[0];
     assert_ne!(copy, tile_a);
-    s.shell.app.select_only(tile_a);
+    s.shell.session().select_only(tile_a);
     s.mods = Modifiers { ctrl: true, alt: true, command: true, ..Default::default() };
     s.key(Key::A);
     s.mods = Modifiers::NONE;
@@ -257,7 +259,7 @@ fn select_all_inverse_children_and_parent_shortcuts() {
     s.cmd_key(Key::A);
     assert_eq!(s.app().selection, kids);
     // Ctrl+Shift+A inverts inside the parent.
-    s.shell.app.select_only(hero);
+    s.shell.session().select_only(hero);
     s.mods = Modifiers { shift: true, command: true, ctrl: true, ..Default::default() };
     s.key(Key::A);
     s.mods = Modifiers::NONE;
@@ -267,7 +269,7 @@ fn select_all_inverse_children_and_parent_shortcuts() {
     want.sort();
     assert_eq!(inv, want);
     // Enter selects the children, Shift+Enter and \ go back up.
-    s.shell.app.select_only(welcome);
+    s.shell.session().select_only(welcome);
     s.key(Key::Enter);
     assert_eq!(s.app().selection, kids);
     with_mods(&mut s, Modifiers::SHIFT, Key::Enter);
@@ -279,7 +281,8 @@ fn select_all_inverse_children_and_parent_shortcuts() {
     s.key(Key::Backslash);
     assert_eq!(s.app().selection, vec![welcome]);
     // Enter on a text layer still starts editing it.
-    s.shell.app.select_only(s.by_name("Welcome back"));
+    let id = s.by_name("Welcome back");
+    s.shell.session().select_only(id);
     s.key(Key::Enter);
     assert!(s.app().canvas.text.is_some());
 }
@@ -375,18 +378,18 @@ fn entering_edit_mode_after_next_match_selects_the_match() {
     let m = s.app().find.results[s.app().find.current.unwrap()].clone();
     let id = m.node;
     assert_eq!(s.app().selection, vec![id]);
-    crate::canvas::textsession::begin_text_edit(&mut s.shell.app, id);
+    crate::canvas::textsession::begin_text_edit(s.shell.session(), id);
     let sess = s.app().canvas.text.as_ref().unwrap();
     assert_eq!(sess.range(), m.range, "the caret selection is the match");
     assert_eq!(text_content(&s, id)[sess.range()].to_lowercase(), "quarter");
     // typing replaces just that word
     let before = text_content(&s, id);
-    crate::canvas::textsession::insert_text(&mut s.shell.app, "period", crate::textedit::EditKind::Typing);
+    crate::canvas::textsession::insert_text(s.shell.session(), "period", crate::textedit::EditKind::Typing);
     let after = text_content(&s, id);
     assert_eq!(after, format!("{}period{}", &before[..m.range.start], &before[m.range.end..]));
-    crate::canvas::textsession::finish_text(&mut s.shell.app, true);
+    crate::canvas::textsession::finish_text(s.shell.session(), true);
     // without a search, entering selects everything as before
-    s.shell.app.close_find();
-    crate::canvas::textsession::begin_text_edit(&mut s.shell.app, id);
+    s.shell.session().close_find();
+    crate::canvas::textsession::begin_text_edit(s.shell.session(), id);
     assert_eq!(s.app().canvas.text.as_ref().unwrap().range(), 0..text_content(&s, id).len());
 }

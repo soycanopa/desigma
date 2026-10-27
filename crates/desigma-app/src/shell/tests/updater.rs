@@ -24,7 +24,7 @@ fn sim(home: bool) -> (Sim, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("desigma_updater_ui_{}_{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut s = Sim::with(Options { home, library: Some(dir.clone()), ..Default::default() });
-    s.shell.app.updater.available = Some(release());
+    s.shell.session().updater.available = Some(release());
     s.frame(vec![]);
     (s, dir)
 }
@@ -105,11 +105,11 @@ fn menu_entries_check_and_toggle() {
     let (mut s, dir) = sim(false);
     assert!(!menus::palette_entries(s.app(), "check for updates").is_empty());
     let ctx = s.ctx.clone();
-    menus::run(&mut s.shell.app, &ctx, Action::ToggleUpdateCheck);
+    menus::run(s.shell.session(), &ctx, Action::ToggleUpdateCheck);
     assert!(s.app().updater.no_auto_check);
     assert_eq!(settings::load_flag(&dir, "check_updates"), Some(false));
     if !crate::RELEASE_BUILD {
-        menus::run(&mut s.shell.app, &ctx, Action::CheckForUpdates);
+        menus::run(s.shell.session(), &ctx, Action::CheckForUpdates);
         assert!(s.app().toast.as_ref().is_some_and(|t| t.text.contains("development build")));
     }
     let _ = std::fs::remove_dir_all(&dir);

@@ -827,9 +827,12 @@ impl App {
         self.fit_all();
     }
 
+    /// File → Open: the picked file opens as a new window tab (the Shell resolves it).
+    /// A new tab never discards the current document, so there is no unsaved question here
+    /// (that guard belongs to opens that replace the session, see `unsaved.rs`).
     pub fn open_dialog(&mut self) {
         if let Some(p) = io::pick_open() {
-            self.request_open(crate::instance::Open::File(p));
+            self.open_tab = Some(crate::app::TabOpen::Path(p));
         }
     }
 

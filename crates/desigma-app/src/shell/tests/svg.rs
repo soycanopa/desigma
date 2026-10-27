@@ -34,7 +34,7 @@ impl Sim {
     }
 
     fn app_mut(&mut self) -> &mut App {
-        &mut self.shell.app
+        self.shell.session()
     }
 
     fn new_ids(&self, before: &std::collections::BTreeSet<NodeId>) -> Vec<NodeId> {

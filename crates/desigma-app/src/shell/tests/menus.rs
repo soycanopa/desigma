@@ -5,7 +5,7 @@ use crate::canvas::tools::Tool;
 use crate::panels::toolbar;
 
 fn open_main(s: &mut Sim) {
-    s.click(Pos2::new(28.0, 24.0));
+    s.click(Pos2::new(28.0, top(24.0)));
     assert_eq!(s.app().ui.menu, Some(MenuKind::Main));
 }
 
@@ -31,12 +31,12 @@ fn hovering_opens_a_submenu_and_clicking_a_leaf_runs_it() {
     let mut s = Sim::new();
     open_main(&mut s);
     assert!(s.app().selection.is_empty());
-    s.mv(Pos2::new(100.0, main_row_center(3)));
+    s.mv(Pos2::new(100.0, top(main_row_center(3))));
     s.frame(vec![]);
     // Edit submenu: top aligned with the hovered row minus the 8px padding; "Select all" is its
     // 7th row after two 17px separators.
-    let top = main_row_center(3) - 12.0 - theme::MENU_PADDING;
-    let y = top + theme::MENU_PADDING + 6.0 * 24.0 + 2.0 * crate::widgets::menu::SEP_H + 12.0;
+    let submenu_top = top(main_row_center(3)) - 12.0 - theme::MENU_PADDING;
+    let y = submenu_top + theme::MENU_PADDING + 6.0 * 24.0 + 2.0 * crate::widgets::menu::SEP_H + 12.0;
     s.mv(Pos2::new(300.0, y));
     s.click(Pos2::new(300.0, y));
     assert_eq!(s.app().ui.menu, None);
@@ -82,7 +82,7 @@ fn escape_closes_submenu_then_menu() {
 #[test]
 fn shape_dropdown_picks_a_tool_and_remembers_it() {
     let mut s = Sim::new();
-    let screen = Rect::from_min_size(Pos2::ZERO, Vec2::new(1600.0, 1088.0));
+    let screen = Rect::from_min_size(Pos2::new(0.0, theme::TITLE_BAR_H), Vec2::new(1600.0, 1088.0 - theme::TITLE_BAR_H));
     let chev = toolbar::chevron_rect(screen, 2);
     s.click(chev.center());
     assert_eq!(s.app().ui.menu, Some(MenuKind::ToolGroup(2)));

@@ -39,6 +39,7 @@ mod styles;
 mod textedit;
 mod textmeasure;
 mod theme;
+mod titlebar;
 mod unsaved;
 mod updater;
 mod util;
@@ -128,6 +129,18 @@ fn main() {
         .with_title(theme::APP_TITLE)
         .with_inner_size([w as f32, h as f32])
         .with_min_inner_size([theme::MIN_WINDOW.0, theme::MIN_WINDOW.1]);
+    // The custom title bar (home, tabs) replaces the native one. On macOS keep the native
+    // chrome — rounded corners and traffic lights — with a transparent full-size titlebar;
+    // elsewhere drop the decorations and draw the window buttons ourselves.
+    viewport = viewport.with_title_shown(false);
+    #[cfg(target_os = "macos")]
+    {
+        viewport = viewport.with_titlebar_shown(false).with_fullsize_content_view(true);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        viewport = viewport.with_decorations(false);
+    }
     if let Some(icon) = window_icon() {
         viewport = viewport.with_icon(icon);
     }

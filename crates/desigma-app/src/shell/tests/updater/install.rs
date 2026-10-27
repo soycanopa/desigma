@@ -31,7 +31,7 @@ fn scratch(name: &str) -> std::path::PathBuf {
 fn dialog_in(state: Install) -> (Sim, std::path::PathBuf) {
     let (mut s, dir) = sim(false);
     click_rect(&mut s, "updater-view");
-    s.shell.app.updater.install = state;
+    s.shell.session().updater.install = state;
     // forget what the idle dialog recorded, so only what the new state draws is found
     for name in ["updater-update", "updater-later", "updater-skip", "updater-page", "updater-bar", "updater-cancel", "updater-restart", "updater-retry"] {
         s.ctx.data_mut(|d| d.remove::<egui::Rect>(egui::Id::new(("test-rect", name.to_string()))));
@@ -98,7 +98,7 @@ fn downloading_shows_progress_and_cancel_only() {
     s.click(egui::Pos2::new(5.0, 5.0));
     assert!(s.app().updater.dialog);
     // unknown size: just the amount
-    s.shell.app.updater.install = Install::Downloading { done: 3_000_000, total: None };
+    s.shell.session().updater.install = Install::Downloading { done: 3_000_000, total: None };
     s.frame(vec![]);
     assert!(texts(&s).iter().any(|x| x == "2.9 MB"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -143,7 +143,7 @@ fn failures_name_the_problem_and_keep_the_release_page() {
 fn the_banner_says_when_the_update_is_ready() {
     let dir = scratch("banner");
     let (mut s, sim_dir) = sim(false);
-    s.shell.app.updater.install = ready(&dir);
+    s.shell.session().updater.install = ready(&dir);
     s.frame(vec![]);
     assert!(texts(&s).iter().any(|x| x == "desigma 99.0.0-alpha.1 is ready to install"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -175,8 +175,8 @@ fn unsaved_changes_are_asked_about_before_restarting() {
     let dir = scratch("unsaved");
     let (mut s, sim_dir) = dialog_in(ready(&dir));
     let _ = install::take_stashed();
-    s.shell.app.file_hash = Some(crate::home::session::doc_hash(&s.shell.app.doc));
-    s.shell.app.doc.name = "Edited".into();
+    s.shell.session().file_hash = Some(crate::home::session::doc_hash(&s.shell.session().doc));
+    s.shell.session().doc.name = "Edited".into();
     click_rect(&mut s, "updater-restart");
     s.frame(vec![]);
     s.frame(vec![]);
@@ -189,7 +189,7 @@ fn unsaved_changes_are_asked_about_before_restarting() {
     assert!(!s.app().updater.pending_restart && matches!(s.app().updater.install, Install::Ready(_)));
     assert!(install::take_stashed().is_none());
     // Discard goes ahead
-    s.shell.app.request_restart();
+    s.shell.session().request_restart();
     s.frame(vec![]);
     s.frame(vec![]);
     click_rect(&mut s, "unsaved-discard");
@@ -209,19 +209,19 @@ fn a_live_session_is_asked_about_before_restarting() {
     let (mut s, sim_dir) = dialog_in(ready(&dir));
     let _ = install::take_stashed();
     let net = Net::default();
-    s.shell.app.start_sharing_with(Box::new(MemHost(net.clone())), false, false, desigma_collab::Role::Editor);
+    s.shell.session().start_sharing_with(Box::new(MemHost(net.clone())), false, false, desigma_collab::Role::Editor);
     net.borrow_mut().host.push_back(HostEv::Ready { link: "desigma://join/abcdefghijklmnop".into() });
     for _ in 0..4 {
         s.frame(vec![]);
     }
-    s.shell.app.request_restart();
+    s.shell.session().request_restart();
     s.frame(vec![]);
     s.frame(vec![]);
     assert_eq!(s.app().dialog.as_ref().map(|d| d.title.as_str()), Some("Stop sharing?"));
     click_rect(&mut s, "dialog-cancel");
     s.frame(vec![]);
     assert!(s.app().collab.hosting() && install::take_stashed().is_none(), "Cancel keeps the session and does not restart");
-    s.shell.app.request_restart();
+    s.shell.session().request_restart();
     s.frame(vec![]);
     s.frame(vec![]);
     click_rect(&mut s, "dialog-ok");
@@ -251,9 +251,9 @@ fn a_different_release_forgets_the_prepared_update() {
     let dir = scratch("other");
     let (mut s, sim_dir) = dialog_in(ready(&dir));
     let newer = Release { version: semver::Version::parse("99.0.0-alpha.2").unwrap(), ..release() };
-    s.shell.app.finish_check(Ok(Some(release())), true);
+    s.shell.session().finish_check(Ok(Some(release())), true);
     assert!(matches!(s.app().updater.install, Install::Ready(_)), "the same release keeps it");
-    s.shell.app.finish_check(Ok(Some(newer)), true);
+    s.shell.session().finish_check(Ok(Some(newer)), true);
     assert_eq!(s.app().updater.install, Install::Idle);
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&sim_dir);

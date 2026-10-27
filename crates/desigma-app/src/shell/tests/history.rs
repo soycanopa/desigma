@@ -29,7 +29,7 @@ fn file_sim() -> (Sim, TmpDir) {
     let dir = TmpDir::new();
     let mut s = Sim::with(Options { home: true, library: Some(dir.0.clone()), ..Default::default() });
     let id = lib(&s).all_files().into_iter().find(|f| f.name == "Welcome").expect("seeded file").id;
-    crate::home::apply(&mut s.shell.app, Act::Open(id));
+    crate::home::apply(s.shell.session(), Act::Open(id));
     s.frame(vec![]);
     s.frame(vec![]);
     (s, dir)
@@ -45,7 +45,7 @@ fn file_id(s: &Sim) -> String {
 
 fn run(s: &mut Sim, a: Action) {
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, a);
+    crate::panels::menus::run(s.shell.session(), &ctx, a);
     s.frame(vec![]);
     s.frame(vec![]);
 }
@@ -71,8 +71,8 @@ fn save_version(s: &mut Sim, name: &str) {
 
 fn delete_node(s: &mut Sim, name: &str) {
     let id = s.by_name(name);
-    s.shell.app.select_only(id);
-    s.shell.app.delete_selection();
+    s.shell.session().select_only(id);
+    s.shell.session().delete_selection();
     s.frame(vec![]);
 }
 
@@ -106,7 +106,8 @@ fn save_a_named_version_view_it_restore_it_and_undo() {
     assert!(s.app().history.viewing.as_ref().unwrap().title.contains("Before cleanup"));
 
     // read-only: shortcuts and the canvas cannot change it, and nothing is autosaved over the file
-    s.shell.app.select_only(s.by_name("Card"));
+    let id = s.by_name("Card");
+    s.shell.session().select_only(id);
     s.key(Key::Delete);
     assert_eq!(nodes(&s), full);
     for _ in 0..40 {
@@ -239,7 +240,7 @@ fn closing_the_window_saves_an_automatic_version() {
     let id = file_id(&s);
     delete_node(&mut s, "Hero");
     assert!(lib(&s).list_versions(&id).is_empty());
-    s.shell.app.save_close_version();
+    s.shell.session().save_close_version();
     let list = lib(&s).list_versions(&id);
     assert_eq!(list.len(), 1);
     assert!(list[0].auto);

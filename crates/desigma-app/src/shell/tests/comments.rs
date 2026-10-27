@@ -7,7 +7,7 @@ use desigma_doc::CommentThread;
 
 fn sim() -> Sim {
     let mut s = Sim::new();
-    s.shell.app.comments.author = Some("Kir".into());
+    s.shell.session().comments.author = Some("Kir".into());
     s
 }
 
@@ -116,7 +116,7 @@ fn escape_cancels_the_composer_and_empty_text_cannot_be_posted() {
 fn clicking_a_pin_opens_the_thread_and_a_reply_is_added() {
     let mut s = sim();
     let id = post(&mut s, "Welcome", "First");
-    s.shell.app.set_tool(Tool::Move);
+    s.shell.session().set_tool(Tool::Move);
     s.click(bubble(&s, &id));
     assert_eq!(s.app().comments.open.as_deref(), Some(id.as_str()));
     s.rect_of("comment-reply-box");
@@ -127,7 +127,7 @@ fn clicking_a_pin_opens_the_thread_and_a_reply_is_added() {
     let t = &s.app().doc.comments[0];
     assert_eq!(t.messages.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(), ["First", "Second message"]);
     assert!(s.app().comments.reply.is_empty(), "the reply box was cleared");
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(s.app().doc.comments[0].messages.len(), 1, "the reply is one undo step");
 }
 
@@ -153,7 +153,7 @@ fn resolving_hides_the_pin_unless_show_resolved_is_on() {
     assert!(s.app().doc.comments[0].resolved);
     assert!(s.app().comments.open.is_none(), "the popover closed");
     assert!(s.app().comments.pin_rects.is_empty(), "resolved pins are hidden");
-    s.shell.app.comments.show_resolved = true;
+    s.shell.session().comments.show_resolved = true;
     s.frame(vec![]);
     assert_eq!(s.app().comments.pin_rects.len(), 1);
     s.cmd_key(Key::Z);
@@ -164,7 +164,7 @@ fn resolving_hides_the_pin_unless_show_resolved_is_on() {
 fn the_message_menu_edits_and_deletes() {
     let mut s = sim();
     let id = post(&mut s, "Welcome", "Original");
-    s.shell.app.reply_comment(&id, "Reply text");
+    s.shell.session().reply_comment(&id, "Reply text");
     s.click(bubble(&s, &id));
     // "…" of the first message, then Edit (first row)
     let dots = s.rect_of("comment-dots-0");
@@ -212,7 +212,7 @@ fn pins_follow_their_node_when_it_moves() {
     let id = post(&mut s, "Welcome", "Stay with the frame");
     let before = bubble(&s, &id);
     let frame = s.by_name("Welcome");
-    s.shell.app.edit_nodes(&[frame], |n| n.transform.tx += 100.0);
+    s.shell.session().edit_nodes(&[frame], |n| n.transform.tx += 100.0);
     s.frame(vec![]);
     let after = bubble(&s, &id);
     let dx = (after.x - before.x) / s.app().view.zoom;
@@ -228,8 +228,8 @@ fn the_panel_lists_threads_and_clicking_one_goes_to_its_pin() {
     s.key(Key::Escape);
     let page2 = s.app().doc.pages[1];
     let anchor = model::make_anchor(&s.app().doc, page2, desigma_doc::Vec2::new(2000.0, 1500.0), None);
-    let b = s.shell.app.post_comment(anchor, "Beta on the second page").unwrap();
-    s.shell.app.set_tool(Tool::Comment);
+    let b = s.shell.session().post_comment(anchor, "Beta on the second page").unwrap();
+    s.shell.session().set_tool(Tool::Comment);
     s.frame(vec![]);
     s.rect_of("comments-panel");
     // "This page" lists only the first thread
@@ -257,7 +257,7 @@ fn the_panel_filters_by_status_and_search() {
     s.type_text("Beta note");
     s.frame(vec![]);
     ctrl_enter(&mut s);
-    s.shell.app.resolve_comment_thread(&a, true);
+    s.shell.session().resolve_comment_thread(&a, true);
     s.frame(vec![]);
     s.rect_of("comment-card-Beta note");
     let status = s.rect_of("comments-filter-status");
@@ -283,7 +283,7 @@ fn leaving_comment_mode_drops_a_draft_and_keeps_pins() {
     let at = inside(&s, "Welcome") + egui::vec2(200.0, 200.0);
     s.click(at);
     assert!(s.app().comments.composer.is_some());
-    s.shell.app.set_tool(Tool::Move);
+    s.shell.session().set_tool(Tool::Move);
     s.frame(vec![]);
     assert!(s.app().comments.composer.is_none());
     assert_eq!(s.app().doc.comments.len(), 1);
@@ -334,6 +334,6 @@ fn your_name_is_asked_in_preferences_and_used_for_new_comments() {
 
 fn run_action(s: &mut Sim, a: crate::panels::menus::Action) {
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, a);
+    crate::panels::menus::run(s.shell.session(), &ctx, a);
     s.frame(vec![]);
 }

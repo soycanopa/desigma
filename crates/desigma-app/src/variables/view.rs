@@ -83,9 +83,16 @@ impl Geom {
     }
 }
 
+/// The panel rect: the remembered size and position, or the default — a centered modal
+/// of `VAR_FLOAT_W x VAR_FLOAT_H`, clamped to the screen and the minimum size.
 pub fn floating_rect(app: &App, screen: Rect) -> Rect {
-    let size = Vec2::new(theme::VAR_FLOAT_W.min(screen.width()), theme::VAR_FLOAT_H.min(screen.height()));
-    let pos = app.vars.float_pos.unwrap_or(Pos2::new(0.0, theme::VAR_FLOAT_Y));
+    let size = app
+        .vars
+        .float_size
+        .unwrap_or_else(|| Vec2::new(theme::VAR_FLOAT_W, theme::VAR_FLOAT_H))
+        .max(Vec2::new(theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H))
+        .min(screen.size());
+    let pos = app.vars.float_pos.unwrap_or_else(|| screen.min + (screen.size() - size) / 2.0);
     let x = pos.x.clamp(screen.left(), (screen.right() - size.x).max(screen.left()));
     let y = pos.y.clamp(screen.top(), (screen.bottom() - size.y).max(screen.top()));
     Rect::from_min_size(Pos2::new(x, y), size)
@@ -254,7 +261,7 @@ pub fn show(app: &mut App, ui: &mut Ui, content: Rect) {
         if g.floating {
             widgets::elevation_400(&p, g.panel, theme::MENU_RADIUS);
         }
-        let radius = if g.floating { theme::cr_each(0, theme::MENU_RADIUS, theme::MENU_RADIUS, 0) } else { theme::cr(0) };
+        let radius = if g.floating { theme::cr(theme::MENU_RADIUS) } else { theme::cr(0) };
         p.rect_filled(g.panel, radius, theme::BG);
         if g.floating {
             p.rect_stroke(g.panel, radius, Stroke::new(1.0, theme::ELEVATION_400_RING), StrokeKind::Inside);
@@ -273,6 +280,9 @@ pub fn show(app: &mut App, ui: &mut Ui, content: Rect) {
             sidebar(app, ui, &g, &mut fr);
         }
         main(app, ui, &g, &mut fr);
+        if g.floating {
+            resize_corners(app, ui, &g);
+        }
         let _ = &p;
     });
 
@@ -341,6 +351,50 @@ fn keys(app: &mut App, ctx: &Context, view: &VariableStore) {
 }
 
 // ------------------------------------------------------------------ small widgets
+
+/// Invisible grips on all four corners that resize the floating panel; only the cursor
+/// hints at them on hover. The size and position are remembered between openings and
+/// never go below the minimum or beyond the screen. The edge(s) opposite the dragged
+/// corner stay put.
+fn resize_corners(app: &mut App, ui: &mut Ui, g: &Geom) {
+    let screen = ui.ctx().content_rect();
+    let min = Vec2::new(theme::VAR_FLOAT_MIN_W, theme::VAR_FLOAT_MIN_H);
+    let grip = Vec2::splat(theme::VAR_GRIP);
+    // (record name, grip rect, cursor): bottom-right keeps the original "vars-resize" name
+    let corners: [(&str, Rect, egui::CursorIcon); 4] = [
+        ("vars-resize-tl", Rect::from_min_size(g.panel.left_top(), grip), egui::CursorIcon::ResizeNorthWest),
+        ("vars-resize-tr", Rect::from_min_size(g.panel.right_top() - Vec2::new(theme::VAR_GRIP, 0.0), grip), egui::CursorIcon::ResizeNorthEast),
+        ("vars-resize-bl", Rect::from_min_size(g.panel.left_bottom() - Vec2::new(0.0, theme::VAR_GRIP), grip), egui::CursorIcon::ResizeSouthWest),
+        ("vars-resize", Rect::from_min_size(g.panel.right_bottom() - grip, grip), egui::CursorIcon::ResizeSouthEast),
+    ];
+    for (i, (name, rect, cursor)) in corners.into_iter().enumerate() {
+        let r = ui.interact(rect, Id::new(("vars-resize", i)), Sense::DRAG);
+        widgets::record(ui, name, rect);
+        if r.hovered() || r.dragged() {
+            ui.ctx().set_cursor_icon(cursor);
+        }
+        if !r.dragged() {
+            continue;
+        }
+        let Some(p) = ui.input(|i| i.pointer.interact_pos()) else { continue };
+        let (size, pos) = match i {
+            0 => ((g.panel.max - p).max(min), g.panel.max), // top-left
+            1 => (Vec2::new(p.x - g.panel.left(), g.panel.bottom() - p.y).max(min), Pos2::new(g.panel.left(), g.panel.bottom())), // top-right
+            2 => (Vec2::new(g.panel.right() - p.x, p.y - g.panel.top()).max(min), Pos2::new(g.panel.right(), g.panel.top())), // bottom-left
+            _ => ((p - g.panel.min).max(min), g.panel.min), // bottom-right
+        };
+        let size = size.min(screen.size());
+        // the opposite edges are fixed, so the dragged corner defines the new origin
+        let pos = match i {
+            0 => pos - size,
+            1 => Pos2::new(pos.x, pos.y - size.y),
+            2 => Pos2::new(pos.x - size.x, pos.y),
+            _ => pos,
+        };
+        app.vars.float_size = Some(size);
+        app.vars.float_pos = Some(pos);
+    }
+}
 
 fn swatch(p: &egui::Painter, rect: Rect, color: Color32) {
     let r = theme::cr((rect.width() * 0.2).round() as u8);

@@ -500,6 +500,25 @@ pub const PRESENT_MAX_SCALE: f32 = 4.0;
 pub const DEFAULT_WINDOW: (f32, f32) = (1600.0, 1088.0);
 pub const MIN_WINDOW: (f32, f32) = (900.0, 600.0);
 pub const APP_TITLE: &str = "desigma";
+
+// ---------------------------------------------------------------- custom title bar
+/// Height of the custom title bar (window buttons, home, tabs) drawn in place of the native
+/// one. On macOS the native traffic lights are recentered onto the bar's middle line (see
+/// `titlebar::align_traffic_lights`), so every bar item and the lights share one axis.
+pub const TITLE_BAR_H: f32 = 38.0;
+/// The title bar sits a step darker than the editor chrome below it.
+pub const TITLE_BAR_BG: Color32 = rgb(0x18181B);
+/// A title-bar tab pill: height and horizontal padding around its label.
+pub const TAB_H: f32 = 26.0;
+pub const TAB_PAD_X: f32 = 12.0;
+/// Widest a tab label gets before eliding.
+pub const TAB_MAX_W: f32 = 200.0;
+/// Inactive / active tab pill fills.
+pub const TAB_BG: Color32 = rgb(0x202024);
+pub const TAB_BG_ACTIVE: Color32 = rgb(0x09090B);
+/// Space the macOS native traffic lights take at the bar's left.
+pub const TITLE_BAR_LEFT_INSET: f32 = 84.0;
+
 pub const DEFAULT_SHAPE_SIZE: f32 = 100.0;
 pub const DEFAULT_TEXT_SIZE: f32 = 16.0;
 pub const DEFAULT_PAGE_BG: u32 = 0xF5F5F5;
@@ -601,10 +620,14 @@ pub const HOME_THUMB_BG: Color32 = rgb(0x3A3A3A);
 pub const VAR_SIDEBAR_W: f32 = 240.0;
 /// Top bar height of the full view (excluding its 1px bottom border).
 pub const VAR_BAR_H: f32 = 48.0;
-/// Floating panel: size and default top-left.
-pub const VAR_FLOAT_W: f32 = 642.0;
-pub const VAR_FLOAT_H: f32 = 380.0;
-pub const VAR_FLOAT_Y: f32 = 8.0;
+/// Floating panel: default size (a centered modal over the editor) and smallest size the
+/// corner grips allow (sidebar plus the sticky name column).
+pub const VAR_FLOAT_W: f32 = 800.0;
+pub const VAR_FLOAT_H: f32 = 580.0;
+pub const VAR_FLOAT_MIN_W: f32 = 480.0;
+pub const VAR_FLOAT_MIN_H: f32 = 240.0;
+/// Hit size of each invisible corner grip.
+pub const VAR_GRIP: f32 = 16.0;
 pub const VAR_FLOAT_BAR_H: f32 = 40.0;
 pub const VAR_HEAD_H: f32 = 40.0;
 pub const VAR_ROW_H: f32 = 40.0;
