@@ -223,7 +223,7 @@ fn device_survives_save_and_load_and_letterboxes_the_presented_frame() {
     std::fs::remove_file(p).ok();
     assert_eq!(back.prototype_device, s.app().doc.prototype_device);
 
-    s.shell.app.doc.prototype_device.background = Some(Color::rgba(10, 20, 30, 255));
+    s.shell.session().doc.prototype_device.background = Some(Color::rgba(10, 20, 30, 255));
     present_open(&mut s);
     let st = s.app().proto.present.as_ref().unwrap();
     let (screen, radius) = st.device_screen.expect("a device screen is laid out");
@@ -247,7 +247,7 @@ fn overflow_dropdown_and_fixed_position() {
     assert_eq!(s.app().doc.get(dash).unwrap().prototype.overflow, desigma_doc::Overflow::None);
     // a layer inside can be fixed
     let hero = s.by_name("Tile A");
-    s.shell.app.select_only(hero);
+    s.shell.session().select_only(hero);
     s.frame(vec![]);
     s.frame(vec![]);
     pick(&mut s, "proto-position", 1);
@@ -431,17 +431,17 @@ fn present_fires_hover_and_after_delay_reactions() {
     let card = s.by_name("Card");
     // hovering the avatar goes to Dashboard instantly; after a delay Dashboard goes to Card
     let avatar = s.by_name("Avatar");
-    s.shell.app.doc.get_mut(avatar).unwrap().prototype.reactions.push(Reaction {
+    s.shell.session().doc.get_mut(avatar).unwrap().prototype.reactions.push(Reaction {
         trigger: Trigger::MouseEnter { delay_ms: 0 },
         actions: vec![Action::Navigate { dest: dash, preserve_scroll: false }],
         transition: None,
     });
-    s.shell.app.doc.get_mut(dash).unwrap().prototype.reactions.push(Reaction {
+    s.shell.session().doc.get_mut(dash).unwrap().prototype.reactions.push(Reaction {
         trigger: Trigger::AfterDelay { delay_ms: 300 },
         actions: vec![Action::Navigate { dest: card, preserve_scroll: false }],
         transition: Some(Transition { kind: TransitionKind::Push(Direction::Left), easing: Easing::Linear, duration_ms: 100 }),
     });
-    s.shell.app.select_only(welcome);
+    s.shell.session().select_only(welcome);
     present_open(&mut s);
     let at = s.app().proto.present.as_ref().unwrap().screen_center_of(avatar).unwrap();
     s.mv(at);
@@ -458,7 +458,7 @@ fn present_wheel_scrolls_a_scrolling_frame_and_fixed_children_stay() {
     let mut s = Sim::new();
     let welcome = s.by_name("Welcome");
     {
-        let d = &mut s.shell.app.doc;
+        let d = &mut s.shell.session().doc;
         d.get_mut(welcome).unwrap().prototype.overflow = desigma_doc::Overflow::Vertical;
         let hero = d.get(welcome).unwrap().children.iter().copied().find(|c| d.get(*c).unwrap().name == "Hero").unwrap();
         d.get_mut(welcome).unwrap().prototype.fixed_children.push(hero);
@@ -468,7 +468,7 @@ fn present_wheel_scrolls_a_scrolling_frame_and_fixed_children_stay() {
         tall.name = "Tall".into();
         d.insert(welcome, tall).unwrap();
     }
-    s.shell.app.select_only(welcome);
+    s.shell.session().select_only(welcome);
     present_open(&mut s);
     let st = s.app().proto.present.as_ref().unwrap();
     assert!(st.player.scroll_range(welcome).y > 800.0);
@@ -492,7 +492,7 @@ fn present_wheel_scrolls_a_scrolling_frame_and_fixed_children_stay() {
 fn present_open_link_asks_first() {
     let mut s = Sim::new();
     let btn = s.by_name("Button");
-    s.shell.app.doc.get_mut(btn).unwrap().prototype.reactions =
+    s.shell.session().doc.get_mut(btn).unwrap().prototype.reactions =
         vec![Reaction { trigger: Trigger::OnClick, actions: vec![Action::OpenUrl { url: "https://example.com/x".into(), new_tab: true }], transition: None }];
     present_open(&mut s);
     let at = s.app().proto.present.as_ref().unwrap().screen_center_of(btn).unwrap();
@@ -508,10 +508,10 @@ fn present_open_link_asks_first() {
 fn toolbar_prototype_mode_switches_the_tab() {
     let mut s = Sim::new();
     assert_ne!(s.app().ui.right_tab, Some(RightTab::Prototype));
-    s.shell.app.ui.right_tab = Some(RightTab::Prototype);
+    s.shell.session().ui.right_tab = Some(RightTab::Prototype);
     s.frame(vec![]);
     assert!(crate::canvas::proto::active(s.app()));
-    s.shell.app.ui.dev_mode = true;
+    s.shell.session().ui.dev_mode = true;
     assert!(!crate::canvas::proto::active(s.app()));
 }
 
@@ -520,12 +520,12 @@ fn present_after_delay_waits_from_the_moment_presenting_starts() {
     let mut s = Sim::new();
     let dash = s.by_name("Dashboard");
     let card = s.by_name("Card");
-    s.shell.app.doc.get_mut(dash).unwrap().prototype.reactions.push(Reaction {
+    s.shell.session().doc.get_mut(dash).unwrap().prototype.reactions.push(Reaction {
         trigger: Trigger::AfterDelay { delay_ms: 600 },
         actions: vec![Action::Navigate { dest: card, preserve_scroll: false }],
         transition: None,
     });
-    s.shell.app.select_only(dash);
+    s.shell.session().select_only(dash);
     // the editor has been running for a while (clock far from zero)
     for _ in 0..30 {
         s.frame(vec![]);

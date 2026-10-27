@@ -14,7 +14,7 @@ fn tmp(name: &str) -> PathBuf {
 
 fn sim(root: &Path) -> Sim {
     let mut s = Sim::new();
-    s.shell.app.libs.set_root(root.to_path_buf());
+    s.shell.session().libs.set_root(root.to_path_buf());
     s
 }
 
@@ -27,9 +27,9 @@ fn frames(s: &mut Sim, n: usize) {
 /// File A publishes its components; returns after the first publish.
 fn publish_from_a(root: &Path) -> Sim {
     let mut a = sim(root);
-    a.shell.app.open_libraries();
+    a.shell.session().open_libraries();
     frames(&mut a, 3);
-    a.shell.app.libs.description = "First version".into();
+    a.shell.session().libs.description = "First version".into();
     let b = a.rect_of("lib-publish");
     a.click(b.center());
     frames(&mut a, 2);
@@ -38,8 +38,8 @@ fn publish_from_a(root: &Path) -> Sim {
 
 fn enable_in_b(root: &Path) -> Sim {
     let mut b = sim(root);
-    b.shell.app.new_document();
-    b.shell.app.open_libraries();
+    b.shell.session().new_document();
+    b.shell.session().open_libraries();
     frames(&mut b, 3);
     let t = b.rect_of("lib-toggle:Untitled");
     b.click(t.center());
@@ -61,7 +61,7 @@ fn modal_publishes_this_file_and_lists_the_library() {
     assert!(!idx.versions[0].changelog.is_empty());
     // Nothing changed since: the modal shows no changes and the button is disabled.
     let mut a = a;
-    a.shell.app.refresh_libraries();
+    a.shell.session().refresh_libraries();
     frames(&mut a, 2);
     assert!(a.app().libs.changes.is_empty());
     let before = std::fs::read_dir(root.join("libraries").join(&info.library_id)).unwrap().count();
@@ -76,8 +76,8 @@ fn changelog_lists_changed_assets_since_last_publish() {
     let root = tmp("changelog");
     let mut a = publish_from_a(&root);
     let main = a.by_name("Primary button");
-    a.shell.app.edit_nodes(&[main], |n| n.size.x += 30.0);
-    a.shell.app.refresh_libraries();
+    a.shell.session().edit_nodes(&[main], |n| n.size.x += 30.0);
+    a.shell.session().refresh_libraries();
     frames(&mut a, 2);
     let ch = a.app().libs.changes.clone();
     assert_eq!(ch.len(), 1, "{ch:?}");
@@ -102,8 +102,8 @@ fn enable_library_drag_component_and_review_updates() {
     assert_eq!(b.app().doc.library.enabled[0].name, "Untitled");
 
     // The library's components show up in the Assets panel and can be dragged out.
-    b.shell.app.close_libraries();
-    b.shell.app.ui.rail = Some(RailItem::Assets);
+    b.shell.session().close_libraries();
+    b.shell.session().ui.rail = Some(RailItem::Assets);
     frames(&mut b, 6);
     let row = b.rect_of("asset:Primary button");
     let canvas_mid = b.app().canvas_rect.center();
@@ -117,12 +117,12 @@ fn enable_library_drag_component_and_review_updates() {
 
     // Library copies cannot be selected: sanitize drops them and they are not on a page.
     let comp = desigma_doc::instance_component(b.app().doc.get(inst).unwrap()).unwrap();
-    b.shell.app.selection = vec![comp];
-    b.shell.app.sanitize();
+    b.shell.session().selection = vec![comp];
+    b.shell.session().sanitize();
     assert!(b.app().selection.is_empty());
 
     // Inspector row names the library.
-    b.shell.app.selection = vec![inst];
+    b.shell.session().selection = vec![inst];
     frames(&mut b, 3);
     b.rect_of("instance-library");
 
@@ -134,15 +134,15 @@ fn enable_library_drag_component_and_review_updates() {
         t.content = "Mine".into();
     }
     n.component.overrides.insert(OverrideField::Characters);
-    let mut hist_doc = std::mem::take(&mut b.shell.app.doc);
+    let mut hist_doc = std::mem::take(&mut b.shell.session().doc);
     Command::Update { node: Box::new(n) }.apply(&mut hist_doc).unwrap();
-    b.shell.app.doc = hist_doc;
+    b.shell.session().doc = hist_doc;
     let w0 = b.app().doc.get(inst).unwrap().size.x;
 
     // A changes the component and republishes.
     let main = a.by_name("Primary button");
-    a.shell.app.edit_nodes(&[main], |n| n.size.x += 40.0);
-    a.shell.app.refresh_libraries();
+    a.shell.session().edit_nodes(&[main], |n| n.size.x += 40.0);
+    a.shell.session().refresh_libraries();
     frames(&mut a, 2);
     let pb = a.rect_of("lib-publish");
     a.click(pb.center());
@@ -188,20 +188,21 @@ fn update_all_and_dismissing_the_banner() {
     let mut a = publish_from_a(&root);
     let mut b = enable_in_b(&root);
     let key = {
-        let snap = b.shell.app.latest_snapshot(&b.app().doc.library.enabled[0].id.clone()).unwrap();
+        let lib_id = b.app().doc.library.enabled[0].id.clone();
+        let snap = b.shell.session().latest_snapshot(&lib_id).unwrap();
         snap.assets.iter().find(|x| x.name == "Primary button").unwrap().key.clone()
     };
     let lib_id = b.app().doc.library.enabled[0].id.clone();
-    b.shell.app.drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).expect("dropped");
+    b.shell.session().drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).expect("dropped");
     let main = a.by_name("Primary button");
-    a.shell.app.edit_nodes(&[main], |n| n.size.y += 8.0);
-    a.shell.app.refresh_libraries();
+    a.shell.session().edit_nodes(&[main], |n| n.size.y += 8.0);
+    a.shell.session().refresh_libraries();
     frames(&mut a, 2);
     let pb = a.rect_of("lib-publish");
     a.click(pb.center());
 
     // The banner can be dismissed for this version...
-    b.shell.app.close_libraries();
+    b.shell.session().close_libraries();
     frames(&mut b, 60);
     assert!(b.app().update_banner_visible());
     let x = b.rect_of("library-updates-dismiss");
@@ -209,7 +210,7 @@ fn update_all_and_dismissing_the_banner() {
     frames(&mut b, 2);
     assert!(!b.app().update_banner_visible());
     // ...but the Libraries modal still offers the review.
-    b.shell.app.open_libraries();
+    b.shell.session().open_libraries();
     frames(&mut b, 3);
     let upd = b.rect_of("lib-update:Untitled");
     b.click(upd.center());
@@ -232,28 +233,28 @@ fn removed_library_assets_are_flagged_in_the_review() {
     let mut b = enable_in_b(&root);
     let lib_id = b.app().doc.library.enabled[0].id.clone();
     let key = {
-        let snap = b.shell.app.latest_snapshot(&lib_id).unwrap();
+        let snap = b.shell.session().latest_snapshot(&lib_id).unwrap();
         snap.assets.iter().find(|x| x.name == "Primary button").unwrap().key.clone()
     };
-    b.shell.app.drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).expect("dropped");
+    b.shell.session().drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).expect("dropped");
 
     // A deletes the component and republishes.
     let main = a.by_name("Primary button");
-    a.shell.app.selection = vec![main];
-    a.shell.app.doc = {
-        let mut d = std::mem::take(&mut a.shell.app.doc);
+    a.shell.session().selection = vec![main];
+    a.shell.session().doc = {
+        let mut d = std::mem::take(&mut a.shell.session().doc);
         Command::Remove { id: main }.apply(&mut d).unwrap();
         d
     };
-    a.shell.app.refresh_libraries();
+    a.shell.session().refresh_libraries();
     frames(&mut a, 2);
     let pb = a.rect_of("lib-publish");
     a.click(pb.center());
 
-    b.shell.app.close_libraries();
+    b.shell.session().close_libraries();
     frames(&mut b, 3);
-    b.shell.app.libs.invalidate();
-    b.shell.app.open_updates_review();
+    b.shell.session().libs.invalidate();
+    b.shell.session().open_updates_review();
     frames(&mut b, 3);
     let all = b.app().libs.pending_all();
     let u = all[0].updates.iter().find(|u| u.name == "Primary button").expect("listed");
@@ -271,12 +272,12 @@ fn go_to_main_of_unavailable_library_shows_a_read_only_preview() {
     let mut b = enable_in_b(&root);
     let lib_id = b.app().doc.library.enabled[0].id.clone();
     let key = {
-        let snap = b.shell.app.latest_snapshot(&lib_id).unwrap();
+        let snap = b.shell.session().latest_snapshot(&lib_id).unwrap();
         snap.assets.iter().find(|x| x.name == "Primary button").unwrap().key.clone()
     };
-    let inst = b.shell.app.drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).unwrap();
+    let inst = b.shell.session().drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).unwrap();
     // The source file was never saved to disk: no file to open.
-    b.shell.app.go_to_main(inst);
+    b.shell.session().go_to_main(inst);
     frames(&mut b, 3);
     assert!(b.app().libs.preview.is_some());
     b.rect_of("library-preview-done");
@@ -291,7 +292,7 @@ fn go_to_main_of_unavailable_library_shows_a_read_only_preview() {
 fn publish_red(root: &Path) -> (Sim, String) {
     use desigma_doc::{Color, Paint, Style, StyleMeta, StyleProperty, VariableKind, VariableStore, VariableValue};
     let mut a = sim(root);
-    a.shell.app.new_document();
+    a.shell.session().new_document();
     let mut store = VariableStore::from_doc(&a.app().doc);
     let coll = store.add_collection("Brand");
     let mode = store.collections[&coll].default_mode.clone();
@@ -299,14 +300,14 @@ fn publish_red(root: &Path) -> (Sim, String) {
     store.set_value(&id, &mode, VariableValue::Color(Color::rgb(255, 0, 0)));
     let n = store.add_variable(&coll, "Brand/Radius", VariableKind::Number).unwrap();
     store.set_value(&n, &mode, VariableValue::Number(8.0));
-    assert!(a.shell.app.commit_store(store, &[], &[]));
-    a.shell.app.doc.styles.insert("Brand/Red".into(), Style::Fill(vec![Paint::solid(Color::rgb(255, 0, 0))]));
+    assert!(a.shell.session().commit_store(store, &[], &[]));
+    a.shell.session().doc.styles.insert("Brand/Red".into(), Style::Fill(vec![Paint::solid(Color::rgb(255, 0, 0))]));
     a.shell
-        .app
+        .session()
         .doc
         .style_meta
         .insert("Brand/Red".into(), StyleMeta { name: "Brand/Red".into(), key: None, description: String::new(), property: StyleProperty::Fill });
-    assert!(a.shell.app.publish_file());
+    assert!(a.shell.session().publish_file());
     let lib_id = a.app().doc.library.published.clone().unwrap().library_id;
     (a, lib_id)
 }
@@ -315,16 +316,16 @@ fn publish_red(root: &Path) -> (Sim, String) {
 fn consumer_with_rect(root: &Path, lib_id: &str) -> (Sim, desigma_doc::NodeId) {
     use desigma_doc::{Color, Node, Paint, Rect};
     let mut b = sim(root);
-    b.shell.app.new_document();
+    b.shell.session().new_document();
     let page = b.app().page;
-    let id = b.shell.app.doc.alloc_id();
+    let id = b.shell.session().doc.alloc_id();
     let mut n = Node::rectangle(id, Rect::new(0.0, 0.0, 40.0, 40.0));
     n.name = "Box".into();
     n.fills = vec![Paint::solid(Color::rgb(255, 255, 255))];
-    b.shell.app.doc.insert(page, n).unwrap();
-    b.shell.app.set_library_enabled(lib_id, true);
-    b.shell.app.selection = vec![id];
-    b.shell.app.changed();
+    b.shell.session().doc.insert(page, n).unwrap();
+    b.shell.session().set_library_enabled(lib_id, true);
+    b.shell.session().selection = vec![id];
+    b.shell.session().changed();
     frames(&mut b, 3);
     (b, id)
 }
@@ -422,17 +423,17 @@ fn updating_a_library_style_is_undoable() {
     let root = tmp("styleupd");
     let (mut a, lib_id) = publish_red(&root);
     let (mut b, id) = consumer_with_rect(&root, &lib_id);
-    let key = b.shell.app.library_styles().into_iter().find(|s| s.name == "Brand/Red").unwrap().key;
-    let local = b.shell.app.use_library_style(&lib_id, &key).expect("imported");
+    let key = b.shell.session().library_styles().into_iter().find(|s| s.name == "Brand/Red").unwrap().key;
+    let local = b.shell.session().use_library_style(&lib_id, &key).expect("imported");
     let red = Style::Fill(vec![Paint::solid(Color::rgb(255, 0, 0))]);
     assert_eq!(format!("{:?}", b.app().doc.styles[&local]), format!("{red:?}"));
-    b.shell.app.apply_style(&[id], &local);
+    b.shell.session().apply_style(&[id], &local);
 
     // A turns the style blue and republishes; B applies the update.
-    a.shell.app.doc.styles.insert("Brand/Red".into(), Style::Fill(vec![Paint::solid(Color::rgb(0, 0, 255))]));
-    assert!(a.shell.app.publish_file());
+    a.shell.session().doc.styles.insert("Brand/Red".into(), Style::Fill(vec![Paint::solid(Color::rgb(0, 0, 255))]));
+    assert!(a.shell.session().publish_file());
     assert_eq!(a.app().doc.library.published.as_ref().unwrap().version, 2);
-    let n = b.shell.app.apply_library_updates(&lib_id, std::slice::from_ref(&key));
+    let n = b.shell.session().apply_library_updates(&lib_id, std::slice::from_ref(&key));
     assert_eq!(n, 1);
     assert_eq!(format!("{:?}", b.app().doc.styles[&local]), format!("{:?}", Style::Fill(vec![Paint::solid(Color::rgb(0, 0, 255))])));
     assert_eq!(box_pixel(&b, id), [0, 0, 255]);
@@ -447,27 +448,27 @@ fn shared_libraries_follow_the_projects_library_root_and_open_its_files() {
     let root = tmp("oneroot");
     let mut s = Sim::with(Options { library: Some(root.clone()), ..Default::default() });
     assert_eq!(s.app().libs.root.as_deref(), Some(root.as_path()), "attach_library points the shared libraries at the same root");
-    assert_eq!(s.shell.app.library().unwrap().root(), root.as_path());
+    assert_eq!(s.shell.session().library().unwrap().root(), root.as_path());
 
     // Publish a projects-library file: the library remembers the file id.
     let home_file = s.app().lib.as_ref().unwrap().all_files()[0].id.clone();
-    s.shell.app.open_library_file(&home_file);
-    assert!(s.shell.app.publish_file());
+    s.shell.session().open_library_file(&home_file);
+    assert!(s.shell.session().publish_file());
     let lib_id = s.app().doc.library.published.clone().unwrap().library_id;
     let idx = desigma_library::Library::open(&root).unwrap().library_index(&lib_id).unwrap();
     assert_eq!(idx.source_file.as_deref(), Some(home_file.as_str()));
-    s.shell.app.flush_autosave();
+    s.shell.session().flush_autosave();
 
     // Another file uses the library; "Go to main component" opens the first one through the home store.
-    s.shell.app.new_library_file(None);
+    s.shell.session().new_library_file(None);
     assert_ne!(s.app().lib_file.as_ref().unwrap().id, home_file);
-    s.shell.app.set_library_enabled(&lib_id, true);
+    s.shell.session().set_library_enabled(&lib_id, true);
     let key = {
-        let snap = s.shell.app.latest_snapshot(&lib_id).unwrap();
+        let snap = s.shell.session().latest_snapshot(&lib_id).unwrap();
         snap.assets.iter().find(|x| x.name == "Primary button").unwrap().key.clone()
     };
-    let inst = s.shell.app.drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).unwrap();
-    s.shell.app.go_to_main(inst);
+    let inst = s.shell.session().drop_library_asset(&lib_id, &key, desigma_doc::Vec2::new(40.0, 40.0)).unwrap();
+    s.shell.session().go_to_main(inst);
     assert_eq!(s.app().lib_file.as_ref().unwrap().id, home_file);
     assert!(!s.app().selection.is_empty(), "the main component is selected");
     let _ = std::fs::remove_dir_all(root);

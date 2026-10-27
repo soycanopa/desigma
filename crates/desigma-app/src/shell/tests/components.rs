@@ -71,7 +71,7 @@ fn editing_the_main_component_updates_instances_in_one_undo_step() {
     // The second button overrides its Bg fill, so only the label opacity follows.
     let red = vec![desigma_doc::Paint::solid(Color::rgb(255, 0, 0))];
     let inst_fill = s.app().doc.get(inst_bg).unwrap().fills.clone();
-    s.shell.app.edit_nodes(&[main_bg, main_label], |n| {
+    s.shell.session().edit_nodes(&[main_bg, main_label], |n| {
         if n.name == "Bg" {
             n.fills = red.clone();
         } else {
@@ -94,16 +94,16 @@ fn editing_inside_an_instance_records_overrides() {
     let inst = s.by_name("Get started");
     let icon = child_of(&s.app().doc, inst, "Icon");
     let bg = child_of(&s.app().doc, inst, "Bg");
-    s.shell.app.edit_nodes(&[bg], |n| n.opacity = 0.4);
+    s.shell.session().edit_nodes(&[bg], |n| n.opacity = 0.4);
     let n = s.app().doc.get(bg).unwrap();
     assert_eq!(n.component.overrides, [OverrideField::Opacity].into_iter().collect());
     // Moving the instance itself is not an override.
-    s.shell.app.edit_nodes(&[inst], |n| n.transform.tx += 10.0);
+    s.shell.session().edit_nodes(&[inst], |n| n.transform.tx += 10.0);
     assert!(!s.app().doc.get(inst).unwrap().component.overrides.contains(&OverrideField::Transform));
     // Main edits don't clobber the override.
     let main = s.by_name("Primary button");
     let main_bg = child_of(&s.app().doc, main, "Bg");
-    s.shell.app.edit_nodes(&[main_bg], |n| n.opacity = 0.9);
+    s.shell.session().edit_nodes(&[main_bg], |n| n.opacity = 0.9);
     assert_eq!(s.app().doc.get(bg).unwrap().opacity, 0.4);
     let _ = icon;
 }
@@ -113,7 +113,7 @@ fn layers_inside_an_instance_are_hidden_not_deleted() {
     let mut s = Sim::new();
     let inst = s.by_name("Get started");
     let bg = child_of(&s.app().doc, inst, "Bg");
-    s.shell.app.selection = vec![bg];
+    s.shell.session().selection = vec![bg];
     let n0 = s.count();
     s.key(Key::Delete);
     assert_eq!(s.count(), n0);
@@ -192,7 +192,7 @@ fn binding_a_layer_to_a_property_from_its_inspector() {
     let mut s = Sim::new();
     let main = s.by_name("Primary button");
     let bg = child_of(&s.app().doc, main, "Bg");
-    s.shell.app.selection = vec![bg];
+    s.shell.session().selection = vec![bg];
     s.frame(vec![]);
     s.frame(vec![]);
     let dd = s.rect_of("bind:Visibility");
@@ -206,7 +206,7 @@ fn binding_a_layer_to_a_property_from_its_inspector() {
 #[test]
 fn assets_panel_lists_components_and_drag_places_an_instance() {
     let mut s = Sim::new();
-    s.shell.app.ui.rail = Some(RailItem::Assets);
+    s.shell.session().ui.rail = Some(RailItem::Assets);
     s.frame(vec![]);
     s.frame(vec![]);
     let row = s.rect_of("asset:Primary button");
@@ -229,11 +229,11 @@ fn assets_panel_lists_components_and_drag_places_an_instance() {
 #[test]
 fn assets_search_filters_rows() {
     let mut s = Sim::new();
-    s.shell.app.ui.rail = Some(RailItem::Assets);
-    s.shell.app.assets.query = "zzz".into();
+    s.shell.session().ui.rail = Some(RailItem::Assets);
+    s.shell.session().assets.query = "zzz".into();
     s.frame(vec![]);
     s.frame(vec![]);
-    let entries = s.shell.app.local_components();
+    let entries = s.shell.session().local_components();
     assert!(!entries.is_empty());
     assert!(crate::panels::assets::filtered(&entries, "zzz").is_empty());
     assert_eq!(crate::panels::assets::filtered(&entries, "PRIMARY").len(), 1);
@@ -258,7 +258,7 @@ fn alt_drag_duplicate_of_an_instance_stays_an_instance() {
     assert!(n.children.iter().all(|k| s.app().doc.get(*k).unwrap().component.source.is_some()));
     // The copy keeps following the main component.
     let main_bg = child_of(&s.app().doc, main, "Bg");
-    s.shell.app.edit_nodes(&[main_bg], |n| n.opacity = 0.3);
+    s.shell.session().edit_nodes(&[main_bg], |n| n.opacity = 0.3);
     assert_eq!(s.app().doc.get(child_of(&s.app().doc, copy, "Bg")).unwrap().opacity, 0.3);
 }
 
@@ -287,12 +287,12 @@ fn combine_selection_builds_a_component_set() {
     let mut s = Sim::new();
     let main = s.by_name("Primary button");
     let first = s.app().doc.get(main).unwrap().clone();
-    s.shell.app.selection = vec![main];
-    s.shell.app.duplicate_selection();
-    let copy = s.shell.app.selection[0];
+    s.shell.session().selection = vec![main];
+    s.shell.session().duplicate_selection();
+    let copy = s.shell.session().selection[0];
     assert_ne!(copy, main);
-    s.shell.app.selection = vec![main, copy];
-    s.shell.app.combine_selection_as_variants();
+    s.shell.session().selection = vec![main, copy];
+    s.shell.session().combine_selection_as_variants();
     let set = s.app().selection[0];
     let n = s.app().doc.get(set).unwrap();
     assert!(matches!(n.kind, NodeKind::ComponentSet(_)));

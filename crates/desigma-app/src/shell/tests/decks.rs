@@ -38,7 +38,7 @@ fn presentation_fullscreen_uses_native_window_and_escape_returns_to_preview() {
 fn deck() -> Sim {
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, crate::panels::menus::Action::NewDeck);
+    crate::panels::menus::run(s.shell.session(), &ctx, crate::panels::menus::Action::NewDeck);
     s.frame(vec![]);
     s.frame(vec![]);
     s

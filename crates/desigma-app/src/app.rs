@@ -60,6 +60,18 @@ pub enum RailItem {
     Plugins,
 }
 
+/// A request to open something as a new window tab, bubbled from the editor UI
+/// (File menu, drops) to the Shell, which owns the tab list.
+#[derive(Clone, Debug)]
+pub enum TabOpen {
+    /// An external file (`.fig`, `.json`, `.svg`, `.desigma`).
+    Path(PathBuf),
+    /// A new empty design file, next to the open one when there is a library.
+    NewFile,
+    NewBoard,
+    NewDeck,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RightTab {
     Design,
@@ -147,6 +159,10 @@ pub struct App {
     pub startup_zoom: Option<f32>,
     /// The projects library (None until opened; tests run without one).
     pub lib: Option<desigma_library::Library>,
+    /// Pending "open in a new tab" request for the Shell to run this frame.
+    pub open_tab: Option<TabOpen>,
+    /// Pending "back to the home screen" request for the Shell to run this frame.
+    pub want_home: bool,
     /// The library file open in the editor, if any (autosaved, shown in the header).
     pub lib_file: Option<crate::home::LibFile>,
     /// Some while the home screen (file browser) is showing instead of the editor.
@@ -215,6 +231,8 @@ impl App {
             scrub: None,
             startup_zoom: None,
             lib: None,
+            open_tab: None,
+            want_home: false,
             lib_file: None,
             home: None,
             dialog: None,

@@ -11,7 +11,7 @@ fn setup() -> (Sim, NodeId) {
     let mut s = Sim::new();
     let id;
     {
-        let app = &mut s.shell.app;
+        let app = s.shell.session();
         id = app.doc.alloc_id();
         let page = app.page;
         // Well clear of the demo content, so a drag never lands in a frame.
@@ -28,7 +28,7 @@ fn setup() -> (Sim, NodeId) {
 }
 
 fn exec(s: &mut Sim, cmd: desigma_doc::Command) {
-    let app = &mut s.shell.app;
+    let app = s.shell.session();
     app.hist.exec(&mut app.doc, cmd).unwrap();
     s.frame(vec![]);
     s.frame(vec![]);
@@ -66,7 +66,7 @@ fn editing_an_animated_field_at_another_time_adds_a_keyframe() {
     let (mut s, id) = setup();
     s.click(s.rect_of("mo-key:Opacity").center());
     assert_eq!(track_keys(&s, id, AnimProperty::Opacity), vec![0]);
-    s.shell.app.motion.playhead_ms = 500;
+    s.shell.session().motion.playhead_ms = 500;
     s.frame(vec![]);
     let r = s.field_rect("mo-op");
     type_in(&mut s, r, "30");
@@ -90,7 +90,7 @@ fn easing_panel_presets_bezier_drag_and_spring_apply_with_undo() {
         exec(&mut s, c);
     }
     let key = KeyRef::new(id, AnimProperty::Position, 0);
-    ins::open_easing(&mut s.shell.app, vec![key]);
+    ins::open_easing(s.shell.session(), vec![key]);
     s.frame(vec![]);
     s.frame(vec![]);
     assert_eq!(easing_of(&s, id, AnimProperty::Position, 0), Ease::Linear);
@@ -151,7 +151,7 @@ fn library_search_filter_and_apply_create_clips() {
     assert_eq!(all, 41);
     assert_eq!(ins::library_visible("", 2).len(), 1, "one group (Enter)");
     assert!(ins::library_visible("burst", 0).iter().all(|g| g.1.iter().all(|p| p.name == "Burst")));
-    s.shell.app.motion.playhead_ms = 250;
+    s.shell.session().motion.playhead_ms = 250;
     s.click(s.rect_of("mo-lib:Burst").center());
     assert!(s.app().motion_ins.library.is_none(), "applying closes the popover");
     let clips = s.app().doc.get(id).unwrap().motion.clips.clone();
@@ -191,7 +191,7 @@ fn clip_popover_edits_delay_duration_and_type() {
 fn dragging_a_layer_in_motion_mode_keys_its_position() {
     let (mut s, id) = setup();
     s.click(s.rect_of("mo-key:Position").center());
-    s.shell.app.motion.playhead_ms = 400;
+    s.shell.session().motion.playhead_ms = 400;
     s.frame(vec![]);
     let x0 = s.app().doc.get(id).unwrap().transform.tx;
     let c = s.screen(x0 + 40.0, 130.0);

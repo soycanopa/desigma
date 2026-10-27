@@ -14,7 +14,7 @@ fn settle(s: &mut Sim) {
 }
 
 fn exec(s: &mut Sim, cmd: desigma_doc::Command) {
-    let app = &mut s.shell.app;
+    let app = s.shell.session();
     app.hist.exec(&mut app.doc, cmd).unwrap();
     app.changed();
     settle(s);
@@ -41,7 +41,7 @@ fn nested() -> (Sim, NodeId, NodeId) {
     let mut s = Sim::new();
     let (frame, id);
     {
-        let app = &mut s.shell.app;
+        let app = s.shell.session();
         let page = app.page;
         let right = app.doc.get(page).unwrap().children.clone().iter().map(|c| crate::util::world_aabb(&app.doc, *c)).map(|r| r.x + r.w).fold(0.0f32, f32::max);
         frame = app.doc.alloc_id();
@@ -83,11 +83,11 @@ fn gizmo_and_path_sit_on_the_layer_centre_inside_an_offset_frame_at_any_zoom() {
         (f.transform.tx, f.transform.ty)
     };
     for zoom in [1.0, 0.6, 2.5] {
-        s.shell.app.view.zoom = zoom;
-        let o = s.shell.app.view.offset;
-        s.shell.app.view.offset = DV::new(o.x + 13.0, o.y - 7.0);
+        s.shell.session().view.zoom = zoom;
+        let o = s.shell.session().view.offset;
+        s.shell.session().view.offset = DV::new(o.x + 13.0, o.y - 7.0);
         for (t, local) in [(0u32, (90.0, 70.0)), (500, (190.0, 120.0)), (1000, (290.0, 170.0))] {
-            s.shell.app.motion.playhead_ms = t;
+            s.shell.session().motion.playhead_ms = t;
             settle(&mut s);
             let app = s.app();
             let want = app.view.to_screen(app.canvas_rect.min, DV::new(ftx + local.0, fty + local.1));
@@ -117,7 +117,7 @@ fn gizmo_follows_clips_and_a_moving_parent() {
     let c = edit::add_keyframe(&s.app().doc, frame, AnimProperty::Position, 1000, Some(AnimValue::Vec2(DV::new(fpos.x + 120.0, fpos.y + 30.0))), None).unwrap();
     exec(&mut s, c);
     for t in [0u32, 300, 700, 1000] {
-        s.shell.app.motion.playhead_ms = t;
+        s.shell.session().motion.playhead_ms = t;
         settle(&mut s);
         let app = s.app();
         // the evaluated document, computed independently of the canvas cache
@@ -151,9 +151,9 @@ fn crosshair_button_hides_the_gizmo() {
 fn timeline_export_button_targets_the_frame_and_explains_an_empty_timeline() {
     let (mut s, id, frame) = nested();
     assert_eq!(timeline::export_target(s.app()), frame, "the top-level frame holding the selection");
-    s.shell.app.selection = vec![frame];
+    s.shell.session().selection = vec![frame];
     assert_eq!(timeline::export_target(s.app()), frame);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     assert_eq!(timeline::export_target(s.app()), s.app().page, "nothing selected: the page");
     assert!(s.app().has_motion_export(frame), "the button would open the export of an animated frame");
     // the button sits in the header between the layer folding and the collapse button
@@ -167,10 +167,10 @@ fn timeline_export_button_targets_the_frame_and_explains_an_empty_timeline() {
     exec(&mut s, c);
     let c = edit::remove_track(&s.app().doc, id, AnimProperty::Rotation).unwrap();
     exec(&mut s, c);
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     settle(&mut s);
     assert!(!s.app().has_motion_export(frame));
-    s.shell.app.toast = None;
+    s.shell.session().toast = None;
     s.click(s.rect_of("motion-export").center());
     let t = s.app().toast.as_ref().expect("a toast explains why").text.clone();
     assert!(t.contains("Nothing to export"), "{t}");
@@ -182,7 +182,7 @@ fn timeline_export_button_targets_the_frame_and_explains_an_empty_timeline() {
 /// A rectangle with a stroke, a drop shadow and a layer blur, selected in Motion mode.
 fn styled() -> (Sim, NodeId) {
     let (mut s, id, _) = nested();
-    let app = &mut s.shell.app;
+    let app = s.shell.session();
     let mut n = Node::rectangle(app.doc.alloc_id(), DRect::new(0.0, 0.0, 80.0, 60.0));
     let page = app.page;
     let sid = n.id;
@@ -210,7 +210,7 @@ fn styled() -> (Sim, NodeId) {
 }
 
 fn scroll_inspector(s: &mut Sim) {
-    s.shell.app.motion_ins.scroll = 1.0e6;
+    s.shell.session().motion_ins.scroll = 1.0e6;
     settle(s);
 }
 
@@ -223,7 +223,7 @@ fn stroke_colour_and_weight_have_keyframe_diamonds() {
     s.click(s.rect_of("mo-key:Stroke weight").center());
     assert_eq!(keys(&s, id, AnimProperty::StrokeWeight), vec![0]);
     // editing at another time adds keyframes; the static stroke stays
-    s.shell.app.motion.playhead_ms = 500;
+    s.shell.session().motion.playhead_ms = 500;
     settle(&mut s);
     let w = s.field_rect("stroke-w");
     type_in(&mut s, w.center(), "8");
@@ -240,7 +240,7 @@ fn stroke_colour_and_weight_have_keyframe_diamonds() {
     s.cmd_key(Key::Z);
     assert_eq!(keys(&s, id, AnimProperty::StrokeColor), vec![0], "one undo step");
     // the diamond removes the keyframe again
-    s.shell.app.motion.playhead_ms = 0;
+    s.shell.session().motion.playhead_ms = 0;
     settle(&mut s);
     s.click(s.rect_of("mo-key:Stroke weight").center());
     assert_eq!(keys(&s, id, AnimProperty::StrokeWeight), vec![500]);
@@ -249,7 +249,7 @@ fn stroke_colour_and_weight_have_keyframe_diamonds() {
 fn open_effect(s: &mut Sim, i: usize, id: NodeId) {
     use crate::panels::effects::{PopKind, PopState};
     let anchor = Rect::from_min_size(Pos2::new(1500.0, 700.0), Vec2::splat(24.0));
-    s.shell.app.props.pop = Some(PopState { kind: PopKind::Effect(i), anchor, ids: vec![id] });
+    s.shell.session().props.pop = Some(PopState { kind: PopKind::Effect(i), anchor, ids: vec![id] });
     settle(s);
 }
 
@@ -274,7 +274,7 @@ fn drop_shadow_and_layer_blur_have_keyframe_diamonds() {
         assert_eq!(keys(&s, id, prop), vec![0], "{name}");
     }
     assert_eq!(key_value(&s, id, AnimProperty::ShadowY, 0), AnimValue::Scalar(4.0), "a new key keeps the look");
-    s.shell.app.motion.playhead_ms = 500;
+    s.shell.session().motion.playhead_ms = 500;
     settle(&mut s);
     type_beside(&mut s, "mo-key:Shadow X", "12");
     type_beside(&mut s, "mo-key:Shadow blur", "20");
@@ -299,7 +299,7 @@ fn drop_shadow_and_layer_blur_have_keyframe_diamonds() {
 fn track_eye_hides_a_track_everywhere_and_undoes() {
     let (mut s, id, _) = nested();
     let stored_tx = motion::base_position(s.app().doc.get(id).unwrap()).x;
-    s.shell.app.motion.playhead_ms = 1000;
+    s.shell.session().motion.playhead_ms = 1000;
     settle(&mut s);
     let moved = |s: &Sim| motion::base_position(s.app().shown_doc().get(id).unwrap()).x;
     assert!(moved(&s) > stored_tx + 100.0, "the position track moves the layer");
@@ -373,7 +373,7 @@ fn scale_lock_toggles_and_scales_proportionally() {
     assert!(s.app().motion_ins.scale_locked(), "on by default, as in Figma");
     s.click(s.rect_of("mo-key:Scale").center());
     assert_eq!(keys(&s, id, AnimProperty::Scale), vec![0]);
-    s.shell.app.motion.playhead_ms = 500;
+    s.shell.session().motion.playhead_ms = 500;
     settle(&mut s);
     let x = s.field_rect("mo-sx");
     type_in(&mut s, x.center(), "50");
@@ -381,7 +381,7 @@ fn scale_lock_toggles_and_scales_proportionally() {
     // unlocked: only the edited axis changes
     s.click(s.rect_of("mo-scale-lock").center());
     assert!(!s.app().motion_ins.scale_locked());
-    s.shell.app.motion.playhead_ms = 800;
+    s.shell.session().motion.playhead_ms = 800;
     settle(&mut s);
     let y = s.field_rect("mo-sy");
     type_in(&mut s, y.center(), "200");
@@ -407,7 +407,7 @@ fn the_first_solid_fill_animates_among_several() {
     s.click(s.rect_of("mo-key:Fill").center());
     assert_eq!(keys(&s, id, AnimProperty::FillColor), vec![0]);
     assert_eq!(key_value(&s, id, AnimProperty::FillColor, 0).color().unwrap().to_hex(), "FF0000");
-    s.shell.app.motion.playhead_ms = 500;
+    s.shell.session().motion.playhead_ms = 500;
     settle(&mut s);
     let hex = s.rect_of("hex:false:0");
     type_in(&mut s, hex.center(), "00FF00");

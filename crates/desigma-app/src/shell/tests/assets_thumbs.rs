@@ -9,7 +9,7 @@ fn child_of(d: &desigma_doc::Document, parent: NodeId, name: &str) -> NodeId {
 
 fn assets_open() -> Sim {
     let mut s = Sim::new();
-    s.shell.app.ui.rail = Some(RailItem::Assets);
+    s.shell.session().ui.rail = Some(RailItem::Assets);
     for _ in 0..4 {
         s.frame(vec![]);
     }
@@ -32,7 +32,7 @@ fn thumbnails_render_lazily_and_refresh_when_the_component_changes() {
 
     // editing the component's background re-renders its thumbnail only
     let bg = child_of(&s.app().doc, main, "Bg");
-    s.shell.app.doc.get_mut(bg).unwrap().fills = vec![Paint::solid(Color::rgb(255, 0, 0))];
+    s.shell.session().doc.get_mut(bg).unwrap().fills = vec![Paint::solid(Color::rgb(255, 0, 0))];
     for _ in 0..30 {
         s.frame(vec![]);
     }

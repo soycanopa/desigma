@@ -301,7 +301,7 @@ fn key_and_gamepad_events_reach_the_player() {
         (Trigger::KeyPress { keys: "Ctrl+K".into() }, 10.0),
         (Trigger::GamepadPress { device: desigma_doc::GamepadDevice::Generic, buttons: "A".into() }, 20.0),
     ] {
-        s.shell.app.doc.get_mut(add).unwrap().prototype.reactions.push(Reaction {
+        s.shell.session().doc.get_mut(add).unwrap().prototype.reactions.push(Reaction {
             trigger,
             actions: vec![Action::SetVariable { variable: count.clone(), value: Expression::number(n) }],
             transition: None,
@@ -328,7 +328,7 @@ fn dragging_an_open_overlay_down_dismisses_it_and_a_short_drag_snaps_back() {
     // a bottom sheet whose handle can be dragged away
     let page = s.app().page;
     let sheet = {
-        let d = &mut s.shell.app.doc;
+        let d = &mut s.shell.session().doc;
         let id = d.alloc_id();
         let mut f = Node::frame(id, DR::new(900.0, 0.0, 390.0, 220.0));
         f.name = "Sheet".into();
@@ -341,7 +341,7 @@ fn dragging_an_open_overlay_down_dismisses_it_and_a_short_drag_snaps_back() {
         sheet
     };
     let reset = s.by_name("Reset");
-    s.shell.app.doc.get_mut(reset).unwrap().prototype.reactions.push(Reaction {
+    s.shell.session().doc.get_mut(reset).unwrap().prototype.reactions.push(Reaction {
         trigger: Trigger::OnClick,
         actions: vec![Action::OpenOverlay {
             dest: sheet,

@@ -220,7 +220,7 @@ pub fn run(app: &mut App, ctx: &Context, a: Action) {
         }
         Action::About => app.show_toast("desigma, a Figma-compatible design editor", false),
         Action::Plugins => app.open_plugins(),
-        Action::BackToFiles => app.go_home(),
+        Action::BackToFiles => app.want_home = true,
         Action::SaveToLibrary => app.begin_save_to_library(),
         Action::Share => app.open_share(),
         Action::JoinSession => app.open_join(None),
@@ -612,7 +612,7 @@ pub fn show(app: &mut App, ctx: &Context) {
         MenuKind::Main => {
             let nodes = main_nodes(app);
             let items = to_items(&nodes);
-            match popup_tree(ctx, id, Pos2::new(theme::MAIN_MENU_X, theme::MAIN_MENU_Y), theme::MAIN_MENU_WIDTH, &items, anchor) {
+            match popup_tree(ctx, id, Pos2::new(theme::MAIN_MENU_X, theme::TITLE_BAR_H + theme::MAIN_MENU_Y), theme::MAIN_MENU_WIDTH, &items, anchor) {
                 TreeResult::Picked(path) => {
                     app.ui.menu = None;
                     if let Some(a) = resolve(&nodes, &path) {

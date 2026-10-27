@@ -40,7 +40,7 @@ fn send(s: &mut Sim, name: &str, args: Value) -> (u16, Value) {
 fn bridge_edits_live_document_with_user_undo_and_reports_selection() {
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    s.shell.app.start_bridge(&ctx).unwrap();
+    s.shell.session().start_bridge(&ctx).unwrap();
     let (port, token) = {
         let b = s.app().bridge.bridge.as_ref().unwrap();
         (b.port(), b.token().to_string())
@@ -85,9 +85,9 @@ fn bridge_edits_live_document_with_user_undo_and_reports_selection() {
         with_frames(&mut s, move || call(port, &t, "desigma_get_document", json!({})))
     };
     assert_eq!(doc["result"]["session"], "editor");
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(s.app().doc.nodes.len(), before);
-    s.shell.app.stop_bridge();
+    s.shell.session().stop_bridge();
     assert!(s.app().bridge.bridge.is_none());
 }
 
@@ -95,7 +95,7 @@ fn bridge_edits_live_document_with_user_undo_and_reports_selection() {
 fn bridge_refuses_mutations_while_a_gesture_runs() {
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    s.shell.app.start_bridge(&ctx).unwrap();
+    s.shell.session().start_bridge(&ctx).unwrap();
     let (port, token) = {
         let b = s.app().bridge.bridge.as_ref().unwrap();
         (b.port(), b.token().to_string())
@@ -121,7 +121,7 @@ fn preference_toggle_starts_the_bridge_saves_the_flag_and_the_pill_turns_it_off(
     let _ = std::fs::remove_dir_all(&dir);
     let mut s = Sim::with(Options { library: Some(dir.clone()), ..Default::default() });
     let ctx = s.ctx.clone();
-    menus::run(&mut s.shell.app, &ctx, Action::ToggleAgentBridge);
+    menus::run(s.shell.session(), &ctx, Action::ToggleAgentBridge);
     assert!(s.app().bridge.bridge.is_some());
     assert_eq!(settings::load_flag(&dir, crate::bridge::FLAG), Some(true));
     assert!(dir.join(crate::bridge::DISCOVERY_FILE).exists());
@@ -131,9 +131,9 @@ fn preference_toggle_starts_the_bridge_saves_the_flag_and_the_pill_turns_it_off(
     assert!(s.app().bridge.bridge.is_none());
     assert_eq!(settings::load_flag(&dir, crate::bridge::FLAG), Some(false));
     assert!(!dir.join(crate::bridge::DISCOVERY_FILE).exists());
-    menus::run(&mut s.shell.app, &ctx, Action::ToggleAgentBridge);
+    menus::run(s.shell.session(), &ctx, Action::ToggleAgentBridge);
     assert!(s.app().bridge.bridge.is_some());
-    menus::run(&mut s.shell.app, &ctx, Action::ToggleAgentBridge);
+    menus::run(s.shell.session(), &ctx, Action::ToggleAgentBridge);
     assert!(s.app().bridge.bridge.is_none());
     assert_eq!(settings::load_flag(&dir, crate::bridge::FLAG), Some(false));
     let _ = std::fs::remove_dir_all(&dir);
@@ -143,7 +143,7 @@ fn preference_toggle_starts_the_bridge_saves_the_flag_and_the_pill_turns_it_off(
 fn bridge_answers_while_the_window_is_hidden() {
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    s.shell.app.start_bridge(&ctx).unwrap();
+    s.shell.session().start_bridge(&ctx).unwrap();
     let b = s.app().bridge.bridge.as_ref().unwrap();
     let (port, token) = (b.port(), b.token().to_string());
     let (send, receive) = std::sync::mpsc::channel();
@@ -166,7 +166,7 @@ fn bridge_answers_while_the_window_is_hidden() {
 fn bridge_edits_are_laid_out_and_selection_follows_the_page() {
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    s.shell.app.start_bridge(&ctx).unwrap();
+    s.shell.session().start_bridge(&ctx).unwrap();
     // the demo's vertical auto-layout card (padding 20) places a new child; created at 0,0
     let card = s.by_name("Card");
     let h = s.app().doc.get(card).unwrap().size.y;
@@ -181,7 +181,7 @@ fn bridge_edits_are_laid_out_and_selection_follows_the_page() {
     assert!((s.app().doc.get(card).unwrap().size.y - h).abs() < 1e-3);
 
     let first = s.app().page;
-    let second = s.shell.app.doc.add_page("Second");
+    let second = s.shell.session().doc.add_page("Second");
     let (_, body) = send(&mut s, "desigma_create_node", json!({"parent_id":second.0,"kind":"rectangle"}));
     let other = NodeId(body["result"]["node"]["id"].as_u64().unwrap());
     let (status, body) = send(&mut s, "desigma_select_nodes", json!({"node_ids":[other.0]}));
@@ -204,7 +204,7 @@ fn bridge_file_tools_act_on_the_editor_document() {
     std::fs::create_dir_all(&dir).unwrap();
     let mut s = Sim::new();
     let ctx = s.ctx.clone();
-    s.shell.app.start_bridge(&ctx).unwrap();
+    s.shell.session().start_bridge(&ctx).unwrap();
     let page = s.app().page.0;
     let (_, body) = send(&mut s, "desigma_create_node", json!({"parent_id":page,"kind":"rectangle","width":40,"height":20}));
     let id = body["result"]["node"]["id"].as_u64().unwrap();
@@ -243,9 +243,9 @@ fn bridge_file_tools_act_on_the_editor_document() {
     assert_eq!(s.app().doc.name, "Fresh");
 
     // the home screen has no editable document
-    s.shell.app.home = Some(crate::home::Home::new());
-    let err = s.shell.app.bridge_call("desigma_get_document", json!({})).unwrap_err();
+    s.shell.session().home = Some(crate::home::Home::new());
+    let err = s.shell.session().bridge_call("desigma_get_document", json!({})).unwrap_err();
     assert!(err.contains("busy"), "{err}");
-    s.shell.app.home = None;
+    s.shell.session().home = None;
     let _ = std::fs::remove_dir_all(&dir);
 }

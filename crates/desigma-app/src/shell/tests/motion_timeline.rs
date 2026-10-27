@@ -15,7 +15,7 @@ fn motion_sim() -> (Sim, NodeId) {
     s.frame(vec![]);
     s.frame(vec![]);
     let hero = s.by_name("Hero");
-    s.shell.app.select_only(hero);
+    s.shell.session().select_only(hero);
     s.frame(vec![]);
     s.frame(vec![]);
     (s, hero)
@@ -238,7 +238,7 @@ fn row_buttons_step_and_toggle_keys() {
 #[test]
 fn layer_row_and_canvas_selection_stay_in_sync() {
     let (mut s, hero) = two_keys();
-    s.shell.app.clear_selection();
+    s.shell.session().clear_selection();
     s.frame(vec![]);
     // the animated layer keeps its row; clicking it selects the node
     click_name(&mut s, &format!("motion-layer-{}", hero.0));
@@ -299,7 +299,7 @@ fn clip_bars_move_and_trim_with_one_undo_step() {
     let (mut s, hero) = motion_sim();
     let cmd = medit::apply_preset(&s.app().doc, &[hero], find_preset("Burst").unwrap(), 250).unwrap();
     {
-        let app = &mut s.shell.app;
+        let app = s.shell.session();
         app.hist.exec(&mut app.doc, cmd).unwrap();
     }
     s.frame(vec![]);
@@ -370,7 +370,7 @@ fn space_plays_and_stops_at_the_end() {
     let tl = desigma_doc::TimelineSettings { duration_ms: 200, ..Default::default() };
     let cmd = medit::set_timeline(&s.app().doc, s.app().page, tl).unwrap();
     {
-        let app = &mut s.shell.app;
+        let app = s.shell.session();
         app.hist.exec(&mut app.doc, cmd).unwrap();
     }
     click_name(&mut s, "motion-play");
@@ -387,9 +387,9 @@ fn copy_and_paste_keyframes_at_the_playhead() {
     let y = key_pos(&s, hero, 0).y;
     s.drag(Pos2::new(tx(&s, 0.0) - 9.0, y - 7.0), Pos2::new(tx(&s, 1100.0), y + 7.0));
     let ctx = s.ctx.clone();
-    assert!(crate::motion::timeline::copy_keys(&mut s.shell.app, &ctx));
+    assert!(crate::motion::timeline::copy_keys(s.shell.session(), &ctx));
     scrub_to(&mut s, 1500.0);
-    assert!(crate::motion::timeline::paste_keys(&mut s.shell.app, &ctx));
+    assert!(crate::motion::timeline::paste_keys(s.shell.session(), &ctx));
     assert_eq!(keys(&s, hero, POS), vec![0, 1000, 1500, 2500]);
     s.cmd_key(Key::Z);
     assert_eq!(keys(&s, hero, POS), vec![0, 1000]);

@@ -27,11 +27,320 @@ struct Shot {
 }
 
 pub struct Shell {
-    app: App,
+    /// One editor session per open file; `active` is drawn when the home screen is not.
+    tabs: Vec<App>,
+    active: usize,
+    /// The home-screen session (file browser). `Some` = it exists; shown while `show_home`.
+    home: Option<App>,
+    show_home: bool,
+    /// Library root every new session re-attaches (None in tests without a library).
+    lib_root: Option<PathBuf>,
     shot: Option<Shot>,
     title: String,
     /// Listens for links and files handed over by a second launch; `None` when another editor owns it.
     _instance: Option<crate::instance::Instance>,
+}
+
+/// Window-level state that follows the focus between sessions: the agent bridge and the
+/// updater. Plugins belong to their document and are stopped when it is left.
+struct WindowBits {
+    bridge: crate::bridge::BridgeState,
+    updater: crate::updater::UpdaterState,
+}
+
+impl Shell {
+    /// The session being drawn: the home screen while it is shown, else the active tab.
+    pub fn session(&mut self) -> &mut App {
+        if self.show_home {
+            self.home.as_mut().expect("the home session exists while shown")
+        } else {
+            &mut self.tabs[self.active]
+        }
+    }
+
+    pub fn peek(&self) -> &App {
+        if self.show_home {
+            self.home.as_ref().expect("the home session exists while shown")
+        } else {
+            &self.tabs[self.active]
+        }
+    }
+
+    /// Whether the home screen is shown in place of a tab (the title-bar home button state).
+    pub(crate) fn showing_home(&self) -> bool {
+        self.show_home
+    }
+
+    /// How many open editor tabs there are.
+    pub(crate) fn tab_count(&self) -> usize {
+        self.tabs.len()
+    }
+
+    /// Index of the active tab.
+    pub(crate) fn active_tab(&self) -> usize {
+        self.active.min(self.tabs.len().saturating_sub(1))
+    }
+
+    /// The session of tab `i` (any tab, not just the active one).
+    pub(crate) fn tab_at(&self, i: usize) -> &App {
+        &self.tabs[i]
+    }
+
+    fn take_window_bits(app: &mut App) -> WindowBits {
+        WindowBits { bridge: std::mem::take(&mut app.bridge), updater: std::mem::take(&mut app.updater) }
+    }
+
+    fn give_window_bits(app: &mut App, bits: WindowBits) {
+        app.bridge = bits.bridge;
+        app.updater = bits.updater;
+        if let Some(b) = &app.bridge.bridge {
+            b.update_document(&app.doc.name, app.file_path.as_deref());
+        }
+    }
+
+    /// A fresh editor session with an empty untitled document (and the library attached).
+    fn blank_session(&self) -> App {
+        let mut doc = desigma_doc::Document::new("Untitled");
+        doc.add_page("Page 1");
+        let mut app = App::new(doc);
+        if let Some(root) = self.lib_root.clone() {
+            app.attach_library(root);
+        }
+        app
+    }
+
+    /// Saves and parks the session being left (autosave, version snapshot, plugin).
+    /// Nothing to park when no tab is open.
+    fn park(&mut self) {
+        if self.tabs.is_empty() {
+            return;
+        }
+        let app = self.session();
+        crate::decks::ui::flush_notes(app);
+        app.save_close_version();
+        app.stop_plugin();
+        app.flush_autosave();
+        app.canvas.reset_interaction();
+    }
+
+    /// The title-bar home button: show the file browser, keeping every tab open.
+    /// Also the landing spot when the last tab closes; `bits` carries window state onto it.
+    /// While the session being left is sharing or joined, "Stop sharing?" / "Leave the
+    /// session?" comes first (agreeing ends it and re-requests home; see `collab`).
+    pub(crate) fn enter_home(&mut self) {
+        if self.show_home {
+            return;
+        }
+        // The sharing question comes before the library check, like `go_home`: agreeing ends
+        // the session and re-requests home next frame.
+        if !self.tabs.is_empty() && !self.session().leave_ok(|app| app.want_home = true) {
+            return;
+        }
+        if self.lib_root.is_none() {
+            self.session().show_toast("The projects library is unavailable", true);
+            return;
+        }
+        self.park();
+        let bits = (!self.tabs.is_empty()).then(|| Self::take_window_bits(&mut self.tabs[self.active]));
+        if self.home.is_none() {
+            let mut app = self.blank_session();
+            let mut home = crate::home::Home::new();
+            if let Some(lib) = &app.lib {
+                home.refresh(lib);
+            }
+            app.home = Some(home);
+            self.home = Some(app);
+        } else if let Some(home) = self.home.as_mut().and_then(|h| h.home.as_mut()) {
+            // other tabs may have saved while home was parked
+            home.dirty = true;
+        }
+        if let Some(bits) = bits {
+            Self::give_window_bits(self.home.as_mut().expect("home session"), bits);
+        }
+        self.show_home = true;
+    }
+
+    pub(crate) fn switch_tab(&mut self, i: usize) {
+        let Some(last) = self.tabs.len().checked_sub(1) else { return };
+        let i = i.min(last);
+        if !self.show_home && i == self.active {
+            return;
+        }
+        if self.show_home {
+            let bits = Self::take_window_bits(self.home.as_mut().expect("home session"));
+            self.show_home = false;
+            self.active = i;
+            Self::give_window_bits(&mut self.tabs[i], bits);
+        } else {
+            self.park();
+            let bits = Self::take_window_bits(&mut self.tabs[self.active]);
+            self.active = i;
+            Self::give_window_bits(&mut self.tabs[i], bits);
+        }
+    }
+
+    /// Closes tab `i`, saving like leaving the editor does. The window bits survive onto
+    /// the neighbouring tab; closing the last tab shows the home screen.
+    pub(crate) fn close_tab(&mut self, i: usize) {
+        if i >= self.tabs.len() {
+            return;
+        }
+        let was_active = !self.show_home && i == self.active;
+        {
+            let t = &mut self.tabs[i];
+            crate::decks::ui::flush_notes(t);
+            t.save_close_version();
+            t.stop_plugin();
+            t.flush_autosave();
+        }
+        let bits = if was_active { Some(Self::take_window_bits(&mut self.tabs[i])) } else { None };
+        self.tabs.remove(i);
+        if self.tabs.is_empty() {
+            // the last tab closed: the home screen (or a fresh document with no library)
+            // takes over, carrying the window state with it
+            self.active = 0;
+            if self.home.is_some() || self.lib_root.is_some() {
+                self.show_home = false;
+                self.enter_home();
+            } else {
+                let app = self.blank_session();
+                self.tabs.push(app);
+                self.active = 0;
+                self.show_home = false;
+            }
+            if let Some(bits) = bits {
+                if self.show_home {
+                    if let Some(h) = self.home.as_mut() {
+                        Self::give_window_bits(h, bits);
+                    }
+                } else {
+                    Self::give_window_bits(&mut self.tabs[self.active], bits);
+                }
+            }
+            return;
+        }
+        if self.active >= self.tabs.len() {
+            self.active = self.tabs.len() - 1;
+        }
+        if let Some(bits) = bits {
+            Self::give_window_bits(&mut self.tabs[self.active], bits);
+        }
+    }
+
+    /// After the home screen opened a file (its session left home mode), that session
+    /// becomes the newly active tab.
+    fn promote_home(&mut self) {
+        let promote = self.show_home && self.home.as_ref().is_some_and(|h| h.home.is_none());
+        if !promote {
+            return;
+        }
+        if let Some(h) = self.home.take() {
+            self.tabs.push(h);
+            self.active = self.tabs.len() - 1;
+            self.show_home = false;
+        }
+    }
+
+    /// A `.json` that is a variables or comments payload merges into the active document
+    /// instead of opening as a file.
+    fn merges_in_place(p: &std::path::Path) -> bool {
+        let is_json = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("json"));
+        is_json && std::fs::read_to_string(p).is_ok_and(|t| crate::comments::import::is_comments_payload(&t) || crate::variables::is_variables_payload(&t))
+    }
+
+    /// Opens an external file as a new tab (or focuses the tab that already has it).
+    pub(crate) fn open_external(&mut self, p: PathBuf) {
+        if Self::merges_in_place(&p) {
+            self.session().open_path(p);
+            return;
+        }
+        if let Err(e) = crate::io::load_path(&p) {
+            self.session().show_toast(e, true);
+            return;
+        }
+        let canon = p.canonicalize().unwrap_or_else(|_| p.clone());
+        let same = |t: &App| t.file_path.as_ref().is_some_and(|f| f.canonicalize().unwrap_or_else(|_| f.to_path_buf()) == canon);
+        if !self.show_home {
+            if let Some(i) = self.tabs.iter().position(same) {
+                self.switch_tab(i);
+                return;
+            }
+        }
+        if self.show_home {
+            // from home the file opens in the home session, which promotes to a tab
+            self.session().open_path(p);
+        } else {
+            let mut app = self.blank_session();
+            app.open_path(p);
+            let bits = Self::take_window_bits(self.session());
+            Self::give_window_bits(&mut app, bits);
+            self.tabs.push(app);
+            self.active = self.tabs.len() - 1;
+        }
+    }
+
+    /// The title-bar "+" (and File → New): a new file next to the open one, as a tab.
+    pub(crate) fn open_new_file(&mut self, kind: crate::app::TabOpen) {
+        use crate::app::TabOpen;
+        if self.show_home {
+            let target = self.session().home_target();
+            match kind {
+                TabOpen::NewFile => self.session().new_library_file(target),
+                TabOpen::NewBoard => self.session().new_library_board(target),
+                TabOpen::NewDeck => self.session().new_library_deck(target),
+                TabOpen::Path(p) => self.session().open_path(p),
+            }
+            return;
+        }
+        let target = self.peek().lib_file.as_ref().map(|f| (f.project_id.clone(), None));
+        let mut app = self.blank_session();
+        match kind {
+            TabOpen::NewFile => app.new_library_file(target),
+            TabOpen::NewBoard => app.new_library_board(target),
+            TabOpen::NewDeck => app.new_library_deck(target),
+            TabOpen::Path(p) => app.open_path(p),
+        }
+        let bits = Self::take_window_bits(self.session());
+        Self::give_window_bits(&mut app, bits);
+        self.tabs.push(app);
+        self.active = self.tabs.len() - 1;
+    }
+
+    /// Runs the tab-open and back-to-home requests the editor UI bubbled up this frame.
+    fn run_shell_requests(&mut self) {
+        let (req, home) = {
+            let a = self.session();
+            (a.open_tab.take(), a.want_home)
+        };
+        if home {
+            self.session().want_home = false;
+            self.enter_home();
+            return;
+        }
+        match req {
+            Some(crate::app::TabOpen::Path(p)) => self.open_external(p),
+            Some(kind @ (crate::app::TabOpen::NewFile | crate::app::TabOpen::NewBoard | crate::app::TabOpen::NewDeck)) => self.open_new_file(kind),
+            None => {}
+        }
+    }
+
+    /// The label a tab shows: the library file name, else the document name
+    /// (the file stem when the document carries none).
+    pub(crate) fn tab_label(app: &App) -> String {
+        if let Some(f) = &app.lib_file {
+            return f.name.clone();
+        }
+        if app.doc.name.is_empty() {
+            if let Some(s) = app.file_path.as_deref().and_then(|p| p.file_stem()).and_then(|s| s.to_str()) {
+                return s.to_string();
+            }
+        }
+        if app.doc.name.is_empty() {
+            "Untitled".into()
+        } else {
+            app.doc.name.clone()
+        }
+    }
 }
 
 impl Shell {
@@ -48,14 +357,14 @@ impl Shell {
         let mut shell = Self::build(&cc.egui_ctx, opts);
         if let Some(rs) = &cc.wgpu_render_state {
             if let Some(max) = canvas::gpu::init(rs) {
-                shell.app.canvas.gpu.available = true;
-                shell.app.canvas.gpu.set_max_texture(max);
+                shell.session().canvas.gpu.available = true;
+                shell.session().canvas.gpu.set_max_texture(max);
             }
         }
         // GPU canvas on by default; screenshots stay on the deterministic CPU path unless --gpu
         let saved = library.as_deref().and_then(|l| crate::comments::settings::load_flag(l, "use_gpu"));
-        shell.app.canvas.gpu.pref = if screenshot { gpu_flag } else { gpu_flag || saved.unwrap_or(true) };
-        shell.app.updater.start(library.as_deref(), launch);
+        shell.session().canvas.gpu.pref = if screenshot { gpu_flag } else { gpu_flag || saved.unwrap_or(true) };
+        shell.session().updater.start(library.as_deref(), launch);
         // Links and files from a second launch (and, on macOS, from Finder and the browser)
         crate::instance::set_context(&cc.egui_ctx);
         #[cfg(target_os = "macos")]
@@ -69,8 +378,8 @@ impl Shell {
         // --bridge turns the agent bridge on for this launch only; the Preferences toggle saves it
         let saved_bridge = library.as_deref().and_then(|l| crate::comments::settings::load_flag(l, crate::bridge::FLAG)) == Some(true);
         if launch && (bridge_flag || saved_bridge) {
-            if let Err(e) = shell.app.start_bridge(&cc.egui_ctx) {
-                shell.app.show_toast(e, true);
+            if let Err(e) = shell.session().start_bridge(&cc.egui_ctx) {
+                shell.session().show_toast(e, true);
             }
         }
         shell
@@ -253,7 +562,9 @@ impl Shell {
             frames: 0,
             requested: false,
         });
-        Self { app, shot, title: String::new(), _instance: None }
+        // A session still on the home screen is the home session; anything else is tab 0.
+        let (tabs, home, show_home) = if app.home.is_some() { (Vec::new(), Some(app), true) } else { (vec![app], None, false) };
+        Self { tabs, active: 0, home, show_home, lib_root: opts.library, shot, title: String::new(), _instance: None }
     }
 
     fn drive_screenshot(&mut self, ctx: &Context) {
@@ -301,43 +612,43 @@ impl Shell {
     }
 
     fn handle_keys(&mut self, ctx: &Context) {
-        if self.app.plugins.open
-            || self.app.dialog.is_some()
-            || self.app.history.save_modal.is_some()
-            || self.app.dev.compare.is_some()
-            || self.app.updater.dialog
+        if self.session().plugins.open
+            || self.session().dialog.is_some()
+            || self.session().history.save_modal.is_some()
+            || self.session().dev.compare.is_some()
+            || self.session().updater.dialog
         {
             return;
         }
         let typing = ctx.egui_wants_keyboard_input();
-        if self.app.vars.open {
+        if self.session().vars.open {
             // The Variables view handles its own keys (and undo / redo).
             return;
         }
         // Open menus own the keyboard (arrows, Enter, Escape, typing in the palette).
-        if self.app.ui.menu.is_some() || self.app.ui.ctx_menu.is_some() || self.app.vars.open {
+        if self.session().ui.menu.is_some() || self.session().ui.ctx_menu.is_some() || self.session().vars.open {
             return;
         }
-        let editing_text = self.app.canvas.text.is_some();
+        let editing_text = self.session().canvas.text.is_some();
         if typing && !editing_text {
             return;
         }
         let events = ctx.input(|i| i.events.clone());
         for ev in events {
             match ev {
-                Event::Copy if !editing_text && crate::motion::timeline::copy_keys(&mut self.app, ctx) => {}
-                Event::Paste(_) if !editing_text && crate::motion::timeline::paste_keys(&mut self.app, ctx) => {}
+                Event::Copy if !editing_text && crate::motion::timeline::copy_keys(self.session(), ctx) => {}
+                Event::Paste(_) if !editing_text && crate::motion::timeline::paste_keys(self.session(), ctx) => {}
                 Event::Copy if !editing_text => {
-                    if let Some(s) = self.app.copy_selection() {
+                    if let Some(s) = self.session().copy_selection() {
                         ctx.copy_text(s);
                     }
                 }
                 Event::Cut if !editing_text => {
-                    if let Some(s) = self.app.cut_selection() {
+                    if let Some(s) = self.session().cut_selection() {
                         ctx.copy_text(s);
                     }
                 }
-                Event::Paste(s) if !editing_text => self.app.paste(Some(&s)),
+                Event::Paste(s) if !editing_text => self.session().paste(Some(&s)),
                 Event::Key { key, pressed: true, modifiers, .. } => {
                     if editing_text {
                         continue;
@@ -350,7 +661,7 @@ impl Shell {
     }
 
     fn key(&mut self, ctx: &Context, key: Key, m: egui::Modifiers) {
-        let app = &mut self.app;
+        let app = self.session();
         let cmd = m.command;
         if app.motion.enabled && crate::motion::timeline::key(app, key, m) {
             return;
@@ -517,8 +828,8 @@ impl Shell {
     /// Right-click on the canvas selects the layer under the pointer and opens the selection menu.
     fn context_menu(&mut self, ui: &egui::Ui, canvas_rect: Rect) {
         let (clicked, pos) = ui.ctx().input(|i| (i.pointer.secondary_clicked(), i.pointer.interact_pos()));
-        let Some(pos) = pos.filter(|p| clicked && canvas_rect.contains(*p) && !self.app.vars.open) else { return };
-        let app = &mut self.app;
+        let Some(pos) = pos.filter(|p| clicked && canvas_rect.contains(*p) && !self.session().vars.open) else { return };
+        let app = self.session();
         if !matches!(app.canvas.inter, canvas::Interaction::None) || app.canvas.text.is_some() {
             return;
         }
@@ -532,11 +843,11 @@ impl Shell {
     }
 
     fn toast(&mut self, ui: &egui::Ui, screen: Rect) {
-        let Some(t) = &self.app.toast else { return };
-        if self.app.now > t.until {
-            self.app.toast = None;
+        if self.peek().toast.as_ref().is_some_and(|t| self.peek().now > t.until) {
+            self.session().toast = None;
             return;
         }
+        let Some(t) = self.peek().toast.as_ref() else { return };
         let p = ui.painter();
         let font = theme::font_body();
         let w = widgets::text_width(p, &t.text, &font) + 48.0;
@@ -560,10 +871,10 @@ impl eframe::App for Shell {
     /// Tab belongs to the text session (it nests list items): take it out of the input before egui
     /// uses it to move keyboard focus between widgets.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
-        if self.app.plugins.open {
+        if self.session().plugins.open {
             return;
         }
-        let Some(sess) = self.app.canvas.text.as_mut() else { return };
+        let Some(sess) = self.session().canvas.text.as_mut() else { return };
         if ctx.memory(|m| m.focused()).is_some() {
             return;
         }
@@ -581,15 +892,21 @@ impl eframe::App for Shell {
     /// Runs even while the window is minimized or occluded (eframe then skips `ui`), so agent
     /// calls keep being answered; the bridge server requests a repaint for each one.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.app.now = ctx.input(|i| i.time);
-        self.app.poll_bridge();
+        self.session().now = ctx.input(|i| i.time);
+        self.session().poll_bridge();
         self.handle_opens(ctx);
-        crate::collab::pump(&mut self.app, ctx);
+        // Live sessions keep receiving messages while their tab is not the one being drawn.
+        for t in &mut self.tabs {
+            crate::collab::pump(t, ctx);
+        }
+        if let Some(h) = &mut self.home {
+            crate::collab::pump(h, ctx);
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        self.app.poll_fonts();
-        if self.app.fonts.is_loading() {
+        self.session().poll_fonts();
+        if self.session().fonts.is_loading() {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
         self.draw(ui);
@@ -598,8 +915,8 @@ impl eframe::App for Shell {
 
 impl Shell {
     /// Links and files handed over by a second launch or the OS (see `instance.rs`): a link
-    /// opens Join session prefilled, a file opens like the CLI path argument, and the window
-    /// comes to the front.
+    /// opens Join session prefilled (asking first when it would replace unsaved work), a file
+    /// opens as a new tab, and the window comes to the front.
     fn handle_opens(&mut self, ctx: &Context) {
         let opens = crate::instance::take();
         if opens.is_empty() {
@@ -607,8 +924,8 @@ impl Shell {
         }
         for open in opens {
             match open {
-                crate::instance::Open::Link(link) => self.app.request_open(crate::instance::Open::Link(link)),
-                crate::instance::Open::File(path) => self.app.request_open(crate::instance::Open::File(path)),
+                crate::instance::Open::Link(link) => self.session().request_open(crate::instance::Open::Link(link)),
+                crate::instance::Open::File(path) => self.open_external(path),
             }
         }
         ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
@@ -619,7 +936,7 @@ impl Shell {
     }
 
     /// Files dropped on the window: `.svg` files are placed at the drop point,
-    /// anything else (the first file) is opened as a document.
+    /// anything else (the first file) is opened as a new tab.
     fn handle_drops(&mut self, ctx: &Context) {
         let (files, pos) = ctx.input(|i| (i.raw.dropped_files.clone(), i.pointer.hover_pos().or(i.pointer.latest_pos())));
         let is_svg = |f: &egui::DroppedFile| {
@@ -627,7 +944,8 @@ impl Shell {
             name.rsplit('.').next().is_some_and(|e| e.eq_ignore_ascii_case("svg"))
         };
         if let Some(path) = files.iter().filter(|f| !is_svg(f)).find_map(|f| f.path.clone()) {
-            self.app.request_open(crate::instance::Open::File(path));
+            // a new tab never throws the current document away, so no unsaved question here
+            self.session().open_tab = Some(crate::app::TabOpen::Path(path));
             return;
         }
         for (nth, f) in files.iter().filter(|f| is_svg(f)).enumerate() {
@@ -646,14 +964,14 @@ impl Shell {
                 .unwrap_or("svg")
                 .to_string();
             match text {
-                Ok(t) => crate::clipboard::drop_svg(&mut self.app, &t, &stem, pos, nth),
-                Err(e) => self.app.show_toast(e, true),
+                Ok(t) => crate::clipboard::drop_svg(self.session(), &t, &stem, pos, nth),
+                Err(e) => self.session().show_toast(e, true),
             }
         }
     }
 
     fn sync_title(&mut self, ctx: &Context) {
-        let title = if self.app.home.is_some() { theme::APP_TITLE.to_string() } else { self.app.title() };
+        let title = if self.show_home { theme::APP_TITLE.to_string() } else { self.peek().title() };
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -663,16 +981,19 @@ impl Shell {
     /// One frame of the home screen (file browser): files dropped on the window are imported.
     fn home_frame(&mut self, ui: &mut egui::Ui, ctx: &Context) {
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
-        if !dropped.is_empty() && self.app.dialog.is_none() {
-            let target = self.app.home_target().or_else(|| self.app.home.as_ref().and_then(|h| h.snap.projects.first().map(|p| (p.id.clone(), None))));
+        if !dropped.is_empty() && self.session().dialog.is_none() {
+            let target =
+                self.session().home_target().or_else(|| self.session().home.as_ref().and_then(|h| h.snap.projects.first().map(|p| (p.id.clone(), None))));
             if let Some((p, f)) = target {
-                self.app.import_into_library(&dropped, &p, f.as_deref());
+                self.session().import_into_library(&dropped, &p, f.as_deref());
             }
         }
-        crate::home::show(&mut self.app, ui);
-        crate::home::dialog::show(&mut self.app, ctx);
-        crate::collab::ui::join_dialog(&mut self.app, ctx);
-        crate::unsaved::dialog(&mut self.app, ctx);
+        crate::home::show(self.session(), ui);
+        crate::home::dialog::show(self.session(), ctx);
+        crate::collab::ui::join_dialog(self.session(), ctx);
+        crate::unsaved::dialog(self.session(), ctx);
+        // opening a file from home turned the session into an editor tab
+        self.promote_home();
         let full = ui.max_rect();
         self.toast(ui, full);
         self.sync_title(ctx);
@@ -681,55 +1002,70 @@ impl Shell {
     /// One full UI pass over the window.
     pub fn draw(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
-        self.app.now = ctx.input(|i| i.time);
-        self.app.poll_plugins();
-        self.app.poll_updater(&ctx);
-        self.app.poll_install(&ctx);
+        self.session().now = ctx.input(|i| i.time);
+        self.session().poll_plugins();
+        self.session().poll_updater(&ctx);
+        self.session().poll_install(&ctx);
         self.drive_screenshot(&ctx);
         if ctx.input(|i| i.viewport().close_requested()) {
-            crate::decks::ui::flush_notes(&mut self.app);
-            self.app.save_close_version();
-            self.app.flush_autosave();
+            for t in &mut self.tabs {
+                crate::decks::ui::flush_notes(t);
+                t.save_close_version();
+                t.flush_autosave();
+            }
+            if let Some(h) = &mut self.home {
+                crate::decks::ui::flush_notes(h);
+                h.save_close_version();
+                h.flush_autosave();
+            }
             // "Restart to update": everything is saved, so the new version can start now
             crate::updater::install::run_stashed();
         }
-        self.app.scrub_sync(&ctx);
-        if self.app.home.is_some() {
-            self.home_frame(ui, &ctx);
-            crate::plugins::ui::show(&mut self.app, &ctx);
-            crate::updater::ui::show(&mut self.app, &ctx);
+        self.session().scrub_sync(&ctx);
+        // Present mode takes the whole window, including the title bar area.
+        if !self.show_home && self.session().proto.present.is_some() {
+            crate::present::show(self.session(), ui);
             return;
         }
-        self.app.autosave_tick(&ctx);
-        self.app.history_tick();
-        self.app.dev_tick(&ctx);
-        self.app.motion_tick(&ctx);
-        if self.app.proto.present.is_some() {
-            crate::present::show(&mut self.app, ui);
+        // The custom title bar spans the window top; the editor and the home screen lay
+        // out in the body below it.
+        let window = ui.max_rect();
+        let bar = Rect::from_min_size(window.min, Vec2::new(window.width(), theme::TITLE_BAR_H));
+        let full = Rect::from_min_max(Pos2::new(window.left(), bar.bottom()), window.max);
+        crate::titlebar::show(self, ui, bar);
+        if self.show_home {
+            let mut body = ui.new_child(egui::UiBuilder::new().max_rect(full));
+            self.home_frame(&mut body, &ctx);
+            crate::plugins::ui::show(self.session(), &ctx);
+            crate::updater::ui::show(self.session(), &ctx);
             return;
         }
+        self.run_shell_requests();
+        self.session().autosave_tick(&ctx);
+        self.session().history_tick();
+        self.session().dev_tick(&ctx);
+        self.session().motion_tick(&ctx);
         self.handle_keys(&ctx);
-        if !self.app.plugins.open {
+        if !self.session().plugins.open {
             self.handle_drops(&ctx);
         }
 
-        let full = ui.max_rect();
         ui.painter().rect_filled(full, 0.0, theme::BG);
         let rail_w = theme::RAIL_WIDTH + theme::BORDER_WIDTH;
         let panel_w = theme::LEFT_PANEL_WIDTH + theme::BORDER_WIDTH;
         let rail_rect = Rect::from_min_max(full.min, Pos2::new(full.left() + rail_w, full.bottom()));
         let left_rect = Rect::from_min_max(Pos2::new(rail_rect.right(), full.top()), Pos2::new(rail_rect.right() + panel_w, full.bottom()));
         // a board has no right panel: its contextual toolbar floats over the canvas instead
-        let board = self.app.is_board();
+        let board = self.session().is_board();
         let right_w = if board { 0.0 } else { theme::RIGHT_PANEL_WIDTH + theme::BORDER_WIDTH };
         let right_rect = Rect::from_min_max(Pos2::new(full.right() - right_w, full.top()), full.max);
-        let canvas_left = if self.app.ui.left_collapsed { rail_rect.right() } else { left_rect.right() };
-        let deck = self.app.is_deck();
+        let canvas_left = if self.session().ui.left_collapsed { rail_rect.right() } else { left_rect.right() };
+        let deck = self.session().is_deck();
         let notes_h = if deck { 132.0_f32.min(full.height() * 0.28) } else { 0.0 };
         let canvas_rect = Rect::from_min_max(Pos2::new(canvas_left, full.top()), Pos2::new(right_rect.left(), full.bottom() - notes_h));
         let notes_rect = Rect::from_min_max(Pos2::new(canvas_left, canvas_rect.bottom()), Pos2::new(right_rect.left(), full.bottom()));
         // Motion mode: the timeline docks under the canvas and the toolbar floats above it.
-        let motion_on = self.app.motion.enabled && !board && !deck;
+        let motion_on = self.session().motion.enabled && !board && !deck;
         let (canvas_rect, timeline_rect) = if motion_on {
             let (c, t) = crate::motion::timeline::split(&ctx, canvas_rect);
             (c, Some(t))
@@ -737,48 +1073,48 @@ impl Shell {
             (canvas_rect, None)
         };
 
-        let full_vars = self.app.vars.open && self.app.vars.full;
+        let full_vars = self.session().vars.open && self.session().vars.full;
         if full_vars {
             // The local-variables full view replaces the left panel, canvas and right panel.
-            rail::show(&mut self.app, ui, rail_rect);
+            rail::show(self.session(), ui, rail_rect);
             let content = Rect::from_min_max(Pos2::new(rail_rect.right(), full.top()), full.max);
-            crate::variables::view::show(&mut self.app, ui, content);
+            crate::variables::view::show(self.session(), ui, content);
         } else {
-            canvas::show(&mut self.app, ui, canvas_rect);
+            canvas::show(self.session(), ui, canvas_rect);
             if let Some(tr) = timeline_rect {
-                crate::motion::timeline::show(&mut self.app, ui, tr);
+                crate::motion::timeline::show(self.session(), ui, tr);
             }
             if deck {
-                crate::decks::ui::notes(&mut self.app, ui, notes_rect);
+                crate::decks::ui::notes(self.session(), ui, notes_rect);
             }
-            rail::show(&mut self.app, ui, rail_rect);
-            if self.app.ui.left_collapsed {
+            rail::show(self.session(), ui, rail_rect);
+            if self.session().ui.left_collapsed {
                 let b = Rect::from_min_size(Pos2::new(canvas_rect.left() + 8.0, canvas_rect.top() + 8.0), Vec2::splat(theme::PANEL_ACTION_BUTTON));
                 ui.painter().rect_filled(b, theme::cr(theme::RADIUS_MEDIUM), theme::BG);
                 if widgets::icon_button(ui, b, "show-sidebar", Icon::Sidebar, false, "Show sidebar").clicked() {
-                    self.app.ui.left_collapsed = false;
+                    self.session().ui.left_collapsed = false;
                 }
             } else if deck {
                 let mode = Rect::from_min_size(left_rect.min, Vec2::new(left_rect.width(), 36.0));
-                crate::decks::ui::mode_bar(&mut self.app, ui, mode);
+                crate::decks::ui::mode_bar(self.session(), ui, mode);
                 let body = Rect::from_min_max(Pos2::new(left_rect.left(), mode.bottom()), left_rect.max);
-                if self.app.decks.design_mode {
-                    left::show(&mut self.app, ui, body);
+                if self.session().decks.design_mode {
+                    left::show(self.session(), ui, body);
                 } else {
-                    crate::decks::ui::sidebar(&mut self.app, ui, body);
+                    crate::decks::ui::sidebar(self.session(), ui, body);
                 }
             } else {
-                left::show(&mut self.app, ui, left_rect);
+                left::show(self.session(), ui, left_rect);
             }
             if board {
-                crate::board::toolbar::show(&mut self.app, ui, canvas_rect_for_toolbar(full));
-                crate::board::bar::show(&mut self.app, ui, canvas_rect);
-                crate::board::section::rename_ui(&mut self.app, ui, canvas_rect);
-                crate::board::canvas::zoom_pill(&mut self.app, ui, canvas_rect);
-                crate::board::session::show(&mut self.app, ui, canvas_rect);
-                crate::collab::ui::board_strip(&mut self.app, ui, canvas_rect);
+                crate::board::toolbar::show(self.session(), ui, canvas_rect_for_toolbar(full));
+                crate::board::bar::show(self.session(), ui, canvas_rect);
+                crate::board::section::rename_ui(self.session(), ui, canvas_rect);
+                crate::board::canvas::zoom_pill(self.session(), ui, canvas_rect);
+                crate::board::session::show(self.session(), ui, canvas_rect);
+                crate::collab::ui::board_strip(self.session(), ui, canvas_rect);
             } else {
-                right::show(&mut self.app, ui, right_rect);
+                right::show(self.session(), ui, right_rect);
                 let tb = if deck {
                     canvas_rect
                 } else if timeline_rect.is_some() {
@@ -786,32 +1122,32 @@ impl Shell {
                 } else {
                     canvas_rect_for_toolbar(full)
                 };
-                toolbar::show(&mut self.app, ui, tb);
+                toolbar::show(self.session(), ui, tb);
             }
-            crate::history::banner::show(&mut self.app, ui, canvas_rect);
-            crate::collab::ui::banner(&mut self.app, ui, canvas_rect);
+            crate::history::banner::show(self.session(), ui, canvas_rect);
+            crate::collab::ui::banner(self.session(), ui, canvas_rect);
             self.context_menu(ui, canvas_rect);
-            menus::show(&mut self.app, &ctx);
-            panels::context::show(&mut self.app, &ctx);
+            menus::show(self.session(), &ctx);
+            panels::context::show(self.session(), &ctx);
             // the floating panel (or only the inspector's binding picker when closed)
-            crate::variables::view::show(&mut self.app, ui, full);
+            crate::variables::view::show(self.session(), ui, full);
         }
-        crate::home::dialog::show(&mut self.app, &ctx);
-        crate::history::modal::show(&mut self.app, &ctx);
-        crate::dev::compare::show(&mut self.app, &ctx);
-        crate::libraries::show(&mut self.app, &ctx);
-        crate::plugins::ui::show(&mut self.app, &ctx);
-        crate::updater::ui::show(&mut self.app, &ctx);
-        crate::bridge::ui::show(&mut self.app, &ctx);
-        crate::collab::ui::share_popover(&mut self.app, &ctx);
-        crate::collab::ui::requests(&mut self.app, &ctx);
-        crate::collab::ui::join_dialog(&mut self.app, &ctx);
-        crate::unsaved::dialog(&mut self.app, &ctx);
+        crate::home::dialog::show(self.session(), &ctx);
+        crate::history::modal::show(self.session(), &ctx);
+        crate::dev::compare::show(self.session(), &ctx);
+        crate::libraries::show(self.session(), &ctx);
+        crate::plugins::ui::show(self.session(), &ctx);
+        crate::updater::ui::show(self.session(), &ctx);
+        crate::bridge::ui::show(self.session(), &ctx);
+        crate::collab::ui::share_popover(self.session(), &ctx);
+        crate::collab::ui::requests(self.session(), &ctx);
+        crate::collab::ui::join_dialog(self.session(), &ctx);
+        crate::unsaved::dialog(self.session(), &ctx);
         self.toast(ui, full);
 
         self.sync_title(&ctx);
-        if self.app.ui.menu == Some(MenuKind::Main) && self.app.ui.menu_anchor.is_none() {
-            self.app.ui.menu = None;
+        if self.session().ui.menu == Some(MenuKind::Main) && self.session().ui.menu_anchor.is_none() {
+            self.session().ui.menu = None;
         }
     }
 }

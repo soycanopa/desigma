@@ -16,7 +16,7 @@ fn dev_sim() -> (Sim, NodeId) {
 
 fn run_action(s: &mut Sim, a: Action) {
     let ctx = s.ctx.clone();
-    crate::panels::menus::run(&mut s.shell.app, &ctx, a);
+    crate::panels::menus::run(s.shell.session(), &ctx, a);
     s.frame(vec![]);
     s.frame(vec![]);
 }
@@ -39,7 +39,7 @@ fn dev_header_marks_ready_and_edits_flip_the_status_to_changed_and_back() {
     s.click(b.center());
     assert_eq!(status(&s, card), Some(DevStatus::ReadyForDev));
 
-    s.shell.app.edit_nodes(&[card], |n| n.opacity = 0.5);
+    s.shell.session().edit_nodes(&[card], |n| n.opacity = 0.5);
     frames(&mut s, 10);
     assert_eq!(status(&s, card), Some(DevStatus::Changed), "an edit after marking flips the status");
 
@@ -57,8 +57,8 @@ fn context_menu_marks_frames_ready_for_dev() {
     let labels = crate::panels::context::labels(s.app());
     assert!(labels.contains(&"Mark as ready for dev".to_string()), "{labels:?}");
     assert!(!labels.contains(&"Mark as completed".to_string()), "no status yet");
-    s.shell.app.ui.ctx_menu = None;
-    s.shell.app.select_only(card);
+    s.shell.session().ui.ctx_menu = None;
+    s.shell.session().select_only(card);
     run_action(&mut s, Action::MarkReadyForDev);
     assert_eq!(status(&s, card), Some(DevStatus::ReadyForDev));
     // the menu now offers the follow-up actions
@@ -70,7 +70,7 @@ fn context_menu_marks_frames_ready_for_dev() {
     assert_eq!(status(&s, card), None);
     // sections accept it, plain rectangles do not
     let hero = s.by_name("Hero");
-    s.shell.app.select_only(hero);
+    s.shell.session().select_only(hero);
     run_action(&mut s, Action::MarkReadyForDev);
     assert_eq!(status(&s, hero), None);
 }
@@ -143,7 +143,7 @@ fn cancelling_the_annotation_editor_leaves_the_document_alone() {
 #[test]
 fn clicking_a_dev_link_asks_before_opening_it() {
     let (mut s, card) = dev_sim();
-    s.shell.app.dev_edit(card, |d| d.links.push(DevLink { label: "Storybook".into(), url: "https://storybook.example.com/card".into() }));
+    s.shell.session().dev_edit(card, |d| d.links.push(DevLink { label: "Storybook".into(), url: "https://storybook.example.com/card".into() }));
     frames(&mut s, 2);
     let link = s.rect_of("dev-link-0");
     s.click(link.center());
@@ -189,13 +189,13 @@ fn left_panel_lists_ready_items_per_page_and_selects_on_click() {
     let (mut s, card) = dev_sim();
     assert_eq!(s.app().dev.left_tab, LeftTab::ReadyForDev);
     run_action(&mut s, Action::MarkReadyForDev);
-    s.shell.app.clear_selection();
+    s.shell.session().clear_selection();
     frames(&mut s, 2);
     let r = s.rect_of(&format!("dev-item-{}", card.0));
     s.click(r.center());
     assert_eq!(s.app().selection, vec![card]);
     // the Layers tab brings back the layer tree
-    s.shell.app.dev.left_tab = LeftTab::Layers;
+    s.shell.session().dev.left_tab = LeftTab::Layers;
     frames(&mut s, 2);
     assert!(s.app().ui.dev_mode);
 }
@@ -204,8 +204,8 @@ fn left_panel_lists_ready_items_per_page_and_selects_on_click() {
 fn compare_changes_opens_from_the_header_and_closes_with_escape() {
     let (mut s, card) = dev_sim();
     run_action(&mut s, Action::MarkReadyForDev);
-    s.shell.app.edit_nodes(&[card], |n| n.name = "Quarterly card".into());
-    s.shell.app.edit_nodes(&[card], |n| n.opacity = 0.8);
+    s.shell.session().edit_nodes(&[card], |n| n.name = "Quarterly card".into());
+    s.shell.session().edit_nodes(&[card], |n| n.opacity = 0.8);
     frames(&mut s, 10);
     assert_eq!(status(&s, card), Some(DevStatus::Changed));
     let b = s.rect_of("dev-compare");
@@ -229,7 +229,7 @@ fn compare_changes_opens_from_the_header_and_closes_with_escape() {
 fn remarking_after_changes_takes_a_new_baseline() {
     let (mut s, card) = dev_sim();
     run_action(&mut s, Action::MarkReadyForDev);
-    s.shell.app.edit_nodes(&[card], |n| n.opacity = 0.7);
+    s.shell.session().edit_nodes(&[card], |n| n.opacity = 0.7);
     frames(&mut s, 10);
     assert_eq!(status(&s, card), Some(DevStatus::Changed));
     run_action(&mut s, Action::MarkReadyForDev);
@@ -275,7 +275,7 @@ fn token_handoff_copies_codegen_reference_and_effective_value_without_editing() 
             RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 4000.0))), time: Some(time), events, ..Default::default() },
             |ui| {
                 let mut c = crate::panels::inspect::Cur { x0: 0.0, oy: 0.0, y: 0.0, w: 240.0 };
-                crate::dev::sections::variables_section(&mut s.shell.app, ui, &mut c, card);
+                crate::dev::sections::variables_section(s.shell.session(), ui, &mut c, card);
             },
         );
         output
@@ -311,11 +311,11 @@ fn color_handoff_copies_the_selected_format() {
     let ctx = s.ctx.clone();
     let mut time = 0.0;
     let mut draw = |format, events| {
-        s.shell.app.dev.color_format = format;
+        s.shell.session().dev.color_format = format;
         time += 0.05;
         let output = ctx.run_ui(
             RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 8000.0))), time: Some(time), events, ..Default::default() },
-            |ui| crate::panels::inspect::show(&mut s.shell.app, ui, Rect::from_min_size(Pos2::ZERO, Vec2::new(240.0, 8000.0))),
+            |ui| crate::panels::inspect::show(s.shell.session(), ui, Rect::from_min_size(Pos2::ZERO, Vec2::new(240.0, 8000.0))),
         );
         output
             .platform_output
@@ -348,12 +348,12 @@ fn color_handoff_copies_the_selected_format() {
 fn selecting_instances_and_vectors_draws_the_dev_panel() {
     let (mut s, _) = dev_sim();
     let inst = s.app().doc.nodes.values().find(|n| matches!(n.kind, NodeKind::Instance { .. })).map(|n| n.id).unwrap();
-    s.shell.app.select_only(inst);
+    s.shell.session().select_only(inst);
     frames(&mut s, 3);
     let board = s.by_name("Dashboard");
-    s.shell.app.select_only(board);
+    s.shell.session().select_only(board);
     frames(&mut s, 3);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     frames(&mut s, 3);
 }
 
@@ -383,11 +383,11 @@ fn library_files_store_the_snapshot_as_a_named_version() {
     let mut s = Sim::with(Options { home: true, library: Some(dir.0.clone()), ..Default::default() });
     let lib: Library = s.app().lib.clone().expect("a library");
     let id = lib.all_files().into_iter().find(|f| f.name == "Welcome").expect("seeded file").id;
-    crate::home::apply(&mut s.shell.app, crate::home::Act::Open(id.clone()));
+    crate::home::apply(s.shell.session(), crate::home::Act::Open(id.clone()));
     frames(&mut s, 3);
     let card = s.by_name("Card");
-    s.shell.app.select_only(card);
-    s.shell.app.dev_mark_ready(&[card]);
+    s.shell.session().select_only(card);
+    s.shell.session().dev_mark_ready(&[card]);
     let n = s.app().doc.get(card).unwrap().clone();
     let v = n.dev.snapshot_version.expect("a version number");
     assert!(n.dev.snapshot.is_none(), "no inline copy for library files");
@@ -396,8 +396,8 @@ fn library_files_store_the_snapshot_as_a_named_version() {
     assert!(saved.label.as_deref().is_some_and(|l| l.starts_with("Ready for dev: Card")), "{:?}", saved.label);
 
     let w0 = n.size.x;
-    s.shell.app.edit_nodes(&[card], |n| n.size.x = w0 + 30.0);
-    s.shell.app.dev_refresh(true);
+    s.shell.session().edit_nodes(&[card], |n| n.size.x = w0 + 30.0);
+    s.shell.session().dev_refresh(true);
     assert_eq!(status(&s, card), Some(DevStatus::Changed));
     let (old, nodes) = s.app().dev_snapshot(card).expect("the snapshot loads from the version");
     assert_eq!(old.get(card).unwrap().size.x, w0);

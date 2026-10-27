@@ -61,5 +61,6 @@ objc2-foundation = { version = "0.2", default-features = false, features = ["std
 [build-dependencies]
 winresource = "0.1"
 
+
 [dev-dependencies]
 gif = { version = "0.14", default-features = false, features = ["std"] }

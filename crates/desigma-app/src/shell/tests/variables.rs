@@ -72,7 +72,7 @@ fn switching_the_card_to_dark_changes_rendered_pixels() {
 /// Top of the Variables rail cell, looked up so rail changes don't break the tests.
 fn variables_rail_top() -> f32 {
     let i = rail::ITEMS.iter().position(|(item, ..)| *item == crate::app::RailItem::Variables).expect("Variables rail item");
-    rail::cell_tops()[i]
+    theme::TITLE_BAR_H + rail::cell_tops()[i]
 }
 
 /// Opens the variables view with the rail item: it starts as the floating panel; `full` expands it.
@@ -219,7 +219,7 @@ fn create_variable_menu_adds_a_typed_variable() {
     let v = s.app().doc.variables.values().find(|v| v.name == "Number").expect("new Number variable");
     assert_eq!(v.kind, VariableKind::Number);
     assert_eq!(v.values.len(), 2, "one value per mode");
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(s.app().doc.variables.len(), before);
 }
 
@@ -290,7 +290,7 @@ fn numeric_fields_bind_and_unbind() {
     let (c, light, _) = theme_ids(s.app());
     let w = store.add_variable(&c, "Size/Wide", VariableKind::Number).unwrap();
     store.set_value(&w, &light, VariableValue::Number(222.0));
-    s.shell.app.commit_store(store, &[], &[]);
+    s.shell.session().commit_store(store, &[], &[]);
     s.frame(vec![]);
     let field = s.field_rect("w");
     s.mv(field.center());
@@ -319,8 +319,8 @@ fn enter_renames_the_selected_row_keeping_its_group() {
     let m = s.rect_of("vars-mode:Dark");
     s.click(Pos2::new(m.left() + 20.0, m.center().y));
     // double click renames a mode; here the header only selects, so use the app state directly
-    s.shell.app.vars.renaming = Some(('m', theme_ids(s.app()).2));
-    s.shell.app.vars.rename_frames = 0;
+    s.shell.session().vars.renaming = Some(('m', theme_ids(s.app()).2));
+    s.shell.session().vars.rename_frames = 0;
     s.frame(vec![]);
     s.type_text("Night");
     s.key(Key::Enter);
@@ -365,7 +365,7 @@ fn delete_and_ctrl_d_work_on_the_selection_in_single_undo_steps() {
     s.key(Key::Delete);
     assert!(!s.app().doc.variables.contains_key(&ink));
     assert!(!s.app().doc.get(title).unwrap().variables.bindings.contains_key("fills/0"));
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert!(s.app().doc.variables.contains_key(&ink));
     assert_eq!(s.app().doc.get(title).unwrap().variables.bindings["fills/0"], ink);
 }
@@ -385,7 +385,7 @@ fn row_menu_has_figmas_items_and_deletes() {
     s.key(Key::Enter);
     s.frame(vec![]);
     assert!(!s.app().doc.variables.contains_key(&ink));
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert!(s.app().doc.variables.contains_key(&ink));
 }
 
@@ -466,7 +466,7 @@ fn dragging_a_row_reorders_and_drops_into_groups() {
     s.drag(Pos2::new(from.left() + 120.0, from.center().y), Pos2::new(target.left() + 120.0, target.top() + 4.0));
     let after = row_order(&s);
     assert!(pos(&after, "Text/Secondary") < pos(&after, "Text/Primary"), "{after:?}");
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(row_order(&s), before);
 
     // onto another group's header row: the variable joins that group
@@ -475,7 +475,7 @@ fn dragging_a_row_reorders_and_drops_into_groups() {
     let hdr = s.rect_of("vars-header:Surface");
     s.drag(Pos2::new(from.left() + 120.0, from.center().y), hdr.center());
     assert!(s.app().doc.variables.values().any(|v| v.name == "Surface/Secondary"), "{:?}", row_order(&s));
-    s.shell.app.undo();
+    s.shell.session().undo();
     assert_eq!(row_order(&s), before);
 }
 
@@ -528,7 +528,7 @@ fn text_fill_edits_only_the_selected_range_and_binds_the_layer() {
     s.type_text("plain");
     let id = s.app().selection[0];
     s.key(Key::Escape);
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     s.scroll_inspector_down();
     let sw = s.rect_of("text-sw");
     s.mv(Pos2::new(sw.right() + 40.0, sw.center().y));

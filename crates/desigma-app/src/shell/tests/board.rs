@@ -36,12 +36,12 @@ fn sticky_text(s: &Sim, id: NodeId) -> String {
 
 /// Adds a shape with text on the page at page position `(x, y)`.
 fn add_shape(s: &mut Sim, name: &str, x: f32, y: f32) -> NodeId {
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     let mut n = Node::shape_with_text(id, DRect::new(x, y, 160.0, 100.0), ShapeKind::RoundedRect, "box");
     n.name = name.into();
     let page = s.app().page;
-    let id = s.shell.app.doc.insert(page, n).unwrap();
-    s.shell.app.changed();
+    let id = s.shell.session().doc.insert(page, n).unwrap();
+    s.shell.session().changed();
     s.frame(vec![]);
     id
 }
@@ -190,7 +190,7 @@ fn tab_makes_the_next_sticky_to_the_right() {
 fn tab_works_on_a_selected_note_too_and_undoes() {
     let mut s = board_demo_sim();
     let a = s.by_name("Sticky 1");
-    s.shell.app.selection = vec![a];
+    s.shell.session().selection = vec![a];
     let before = stickies(&s).len();
     s.key(Key::Tab);
     assert_eq!(stickies(&s).len(), before + 1);
@@ -381,7 +381,7 @@ fn deleting_a_node_leaves_its_connector_with_a_free_end_and_undo_reattaches() {
     let rel = s.by_name("Release");
     let c = s.by_name("Connector 2");
     let end_before = connector_route(&s.app().doc, c).unwrap().end();
-    s.shell.app.selection = vec![rel];
+    s.shell.session().selection = vec![rel];
     s.key(Key::Delete);
     assert!(s.app().doc.get(rel).is_none());
     let end_after = connector_route(&s.app().doc, c).unwrap().end();
@@ -419,7 +419,7 @@ fn contextual_bar_recolors_notes_and_undoes() {
     let a = s.by_name("Sticky 1");
     // no selection: no bar
     assert!(s.ctx.data(|d| d.get_temp::<Rect>(egui::Id::new(("test-rect", "board-bar".to_string())))).is_none() || s.app().selection.is_empty());
-    s.shell.app.selection = vec![a];
+    s.shell.session().selection = vec![a];
     s.frame(vec![]);
     let bar = s.rect_of("board-bar");
     let sel = crate::util::world_aabb(&s.app().doc, a);
@@ -445,7 +445,7 @@ fn contextual_bar_recolors_notes_and_undoes() {
 fn contextual_bar_text_size_and_alignment() {
     let mut s = board_demo_sim();
     let a = s.by_name("Sticky 1");
-    s.shell.app.selection = vec![a];
+    s.shell.session().selection = vec![a];
     s.frame(vec![]);
     let minus = s.rect_of("board-size-minus");
     s.click(minus.center());
@@ -467,7 +467,7 @@ fn contextual_bar_text_size_and_alignment() {
 fn contextual_bar_for_connectors_has_line_style_and_caps() {
     let mut s = board_demo_sim();
     let c = s.by_name("Connector 1");
-    s.shell.app.selection = vec![c];
+    s.shell.session().selection = vec![c];
     s.frame(vec![]);
     let curved = s.rect_of("board-line-Curved");
     s.click(curved.center());
@@ -499,7 +499,7 @@ fn contextual_bar_for_connectors_has_line_style_and_caps() {
 fn contextual_bar_for_shapes_swaps_the_shape() {
     let mut s = board_demo_sim();
     let d = s.by_name("Decision");
-    s.shell.app.selection = vec![d];
+    s.shell.session().selection = vec![d];
     s.frame(vec![]);
     let btn = s.rect_of("board-shape-btn");
     s.click(btn.center());
@@ -633,9 +633,9 @@ fn board_items_survive_a_copy_paste_with_their_connectors() {
     let a = s.by_name("Decision");
     let b = s.by_name("Release");
     let c = s.by_name("Connector 2");
-    s.shell.app.selection = vec![a, b, c];
+    s.shell.session().selection = vec![a, b, c];
     let n0 = s.count();
-    s.shell.app.duplicate_selection();
+    s.shell.session().duplicate_selection();
     assert_eq!(s.count(), n0 + 3);
     let copies = s.app().selection.clone();
     assert_eq!(copies.len(), 3);
@@ -649,7 +649,7 @@ fn board_items_survive_a_copy_paste_with_their_connectors() {
 fn author_line_toggle_on_the_bar() {
     let mut s = board_demo_sim();
     let a = s.by_name("Sticky 1");
-    s.shell.app.selection = vec![a];
+    s.shell.session().selection = vec![a];
     s.frame(vec![]);
     let show = |s: &Sim| matches!(&s.app().doc.get(a).unwrap().kind, NodeKind::Sticky(p) if p.show_author);
     assert!(!show(&s));
@@ -675,7 +675,7 @@ fn undo_and_redo_cover_every_board_edit_in_one_history() {
     s.key(Key::Escape);
     let bc = node_center(&s, b);
     s.drag(bc, bc + Vec2::new(0.0, 100.0 * s.app().view.zoom));
-    s.shell.app.selection = vec![c];
+    s.shell.session().selection = vec![c];
     s.frame(vec![]);
     let curved = s.rect_of("board-line-Curved");
     s.click(curved.center());
@@ -705,7 +705,7 @@ fn connectors_follow_nudges_resizes_and_moves_of_a_whole_section() {
     let c = s.by_name("Connector 2");
     let end0 = connector_route(&s.app().doc, c).unwrap().end();
     // arrow keys nudge the selection, one undo step each
-    s.shell.app.selection = vec![rel];
+    s.shell.session().selection = vec![rel];
     s.mods = Modifiers::SHIFT;
     s.key(Key::ArrowDown);
     s.mods = Modifiers::NONE;
@@ -729,8 +729,8 @@ fn connectors_follow_nudges_resizes_and_moves_of_a_whole_section() {
     let sec = s.by_name("Went well");
     let c1 = s.by_name("Connector 1");
     let start0 = connector_route(&s.app().doc, c1).unwrap().start();
-    s.shell.app.selection = vec![sec];
-    s.shell.app.nudge(0.0, 40.0);
+    s.shell.session().selection = vec![sec];
+    s.shell.session().nudge(0.0, 40.0);
     s.frame(vec![]);
     let start1 = connector_route(&s.app().doc, c1).unwrap().start();
     assert!((start1.y - start0.y - 40.0).abs() < 0.01, "{start0:?} -> {start1:?}");
@@ -751,8 +751,8 @@ fn moving_a_free_connector_carries_its_loose_ends() {
     s.key(Key::Escape);
     // a connector with one loose end moves by its loose end; the attached end stays on its node
     let r0 = connector_route(&s.app().doc, c).unwrap();
-    s.shell.app.selection = vec![c];
-    s.shell.app.nudge(0.0, 30.0);
+    s.shell.session().selection = vec![c];
+    s.shell.session().nudge(0.0, 30.0);
     let r1 = connector_route(&s.app().doc, c).unwrap();
     assert_eq!(r1.start(), r0.start(), "the end on the shape stays put");
     assert!((r1.end().y - r0.end().y - 30.0).abs() < 0.01, "{:?} -> {:?}", r0.end(), r1.end());
@@ -776,21 +776,21 @@ fn code_of(s: &Sim, id: NodeId) -> desigma_doc::CodeBlockProps {
 }
 
 fn add_code(s: &mut Sim, x: f32, y: f32, lang: desigma_doc::CodeLang, code: &str) -> NodeId {
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     let n = Node::code_block(id, DRect::new(x, y, 400.0, 200.0), lang, code);
     let page = s.app().page;
-    let id = s.shell.app.doc.insert(page, n).unwrap();
-    s.shell.app.changed();
+    let id = s.shell.session().doc.insert(page, n).unwrap();
+    s.shell.session().changed();
     s.frame(vec![]);
     id
 }
 
 fn add_sticky(s: &mut Sim, x: f32, y: f32, text: &str) -> NodeId {
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     let n = Node::sticky(id, DRect::new(x, y, STICKY_SIZE, STICKY_SIZE), text);
     let page = s.app().page;
-    let id = s.shell.app.doc.insert(page, n).unwrap();
-    s.shell.app.changed();
+    let id = s.shell.session().doc.insert(page, n).unwrap();
+    s.shell.session().changed();
     s.frame(vec![]);
     id
 }
@@ -824,7 +824,7 @@ fn code_tool_places_a_block_and_typing_goes_into_it() {
 fn code_bar_picks_language_theme_line_numbers_and_copies() {
     let mut s = board_sim();
     let id = add_code(&mut s, 200.0, 200.0, desigma_doc::CodeLang::Plain, "let a = 1;");
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     s.frame(vec![]);
     // language picker
     let lang = s.rect_of("board-lang-btn");
@@ -860,7 +860,7 @@ fn code_bar_picks_language_theme_line_numbers_and_copies() {
 fn code_bar_has_text_size_but_no_alignment() {
     let mut s = board_sim();
     let id = add_code(&mut s, 200.0, 200.0, desigma_doc::CodeLang::Json, "{}");
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     s.frame(vec![]);
     let plus = s.rect_of("board-size-plus");
     s.click(plus.center());
@@ -890,7 +890,7 @@ fn sticky_palette_is_complete_and_wide_notes_come_from_the_menu() {
     assert_eq!(n.size, desigma_doc::Vec2::new(desigma_doc::STICKY_WIDE_W, desigma_doc::STICKY_WIDE_H));
     assert!(matches!(&n.kind, NodeKind::Sticky(p) if p.wide));
     // the bar toggles the shape back, keeping the height
-    s.shell.app.selection = vec![id];
+    s.shell.session().selection = vec![id];
     s.frame(vec![]);
     let toggle = s.rect_of("board-wide");
     s.click(toggle.center());
@@ -909,12 +909,12 @@ fn sticky_palette_is_complete_and_wide_notes_come_from_the_menu() {
 #[test]
 fn text_layers_can_be_highlighted_from_the_bar() {
     let mut s = board_sim();
-    let id = s.shell.app.doc.alloc_id();
+    let id = s.shell.session().doc.alloc_id();
     let page = s.app().page;
     let style = desigma_doc::TextStyle { font_size: 24.0, ..Default::default() };
-    s.shell.app.doc.insert(page, Node::text(id, DRect::new(300.0, 300.0, 200.0, 40.0), "Important", style)).unwrap();
-    s.shell.app.changed();
-    s.shell.app.selection = vec![id];
+    s.shell.session().doc.insert(page, Node::text(id, DRect::new(300.0, 300.0, 200.0, 40.0), "Important", style)).unwrap();
+    s.shell.session().changed();
+    s.shell.session().selection = vec![id];
     s.frame(vec![]);
     let hl = |s: &Sim| s.app().doc.get(id).unwrap().fills.first().and_then(crate::board::create::solid_rgb);
     assert_eq!(hl(&s), None);
@@ -1002,7 +1002,7 @@ fn timer_starts_counts_adds_minutes_resets_and_undoes() {
 fn a_running_timer_that_ran_out_shows_zero() {
     let mut s = board_sim();
     let now = crate::board::session::now();
-    s.shell.app.doc.board_session.timer = Some(desigma_doc::TimerState { total_secs: 60.0, left_secs: 60.0, started_at: Some(now - 90.0) });
+    s.shell.session().doc.board_session.timer = Some(desigma_doc::TimerState { total_secs: 60.0, left_secs: 60.0, started_at: Some(now - 90.0) });
     s.frame(vec![]);
     let t = session(&s).timer.unwrap();
     assert!(t.finished(now));
@@ -1024,7 +1024,7 @@ fn voting_session_counts_votes_and_lists_results() {
     assert_eq!(s.app().board.votes_each, desigma_doc::VOTES_DEFAULT + 1);
     let go = s.rect_of("board-vote-go");
     s.click(go.center());
-    let me = crate::board::session::voter_id(&mut s.shell.app);
+    let me = crate::board::session::voter_id(s.shell.session());
     let v = session(&s).vote.unwrap();
     assert_eq!((v.votes_per_person, v.ended, v.used(&me)), (4, false, 0));
     assert!(session(&s).voting());
@@ -1094,15 +1094,15 @@ fn the_vote_limit_counts_only_my_votes_and_totals_are_sums() {
         s.click(go.center());
     };
     go_vote(&mut s);
-    let me = crate::board::session::voter_id(&mut s.shell.app);
-    assert_eq!(crate::board::session::voter_id(&mut s.shell.app), me, "the id is stable");
+    let me = crate::board::session::voter_id(s.shell.session());
+    assert_eq!(crate::board::session::voter_id(s.shell.session()), me, "the id is stable");
     // someone else spent all their votes, and used up more than the limit in total
     let mut sess = session(&s);
     let v = sess.vote.as_mut().unwrap();
     for _ in 0..desigma_doc::VOTES_DEFAULT {
         assert!(v.add(a, "other"));
     }
-    s.shell.app.doc.board_session = sess;
+    s.shell.session().doc.board_session = sess;
     s.frame(vec![]);
     let (pa, pb) = (node_center(&s, a), node_center(&s, b));
     // my own votes still work: three of mine, then the fourth is refused
@@ -1138,12 +1138,12 @@ fn votes_of_an_old_file_count_as_one_legacy_voter() {
     let mut sess = session(&s);
     let old = format!(r#"{{"votes_per_person":3,"ended":false,"votes":{{"{}":2}}}}"#, a.0);
     sess.vote = Some(serde_json::from_str(&old).unwrap());
-    s.shell.app.doc.board_session = sess;
+    s.shell.session().doc.board_session = sess;
     s.frame(vec![]);
     let v = session(&s).vote.unwrap();
     assert_eq!(v.count(a), 2);
     // this install is a new voter with its full budget, on top of the old votes
-    let me = crate::board::session::voter_id(&mut s.shell.app);
+    let me = crate::board::session::voter_id(s.shell.session());
     assert_eq!(v.left(&me), 3);
     let pa = node_center(&s, a);
     s.click(pa);

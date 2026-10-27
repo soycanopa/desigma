@@ -275,7 +275,7 @@ fn hovering_a_table_shows_its_handles_and_they_stay_while_the_pointer_reaches_fo
     let t = place_table(&mut s, 500.0, 300.0);
     s.key(Key::Escape);
     s.key(Key::Escape);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.mv(s.screen(120.0, 560.0));
     assert!(tbl::handle_table(s.app()).is_none());
     s.mv(cell_center(&s, t, 1, 1));
@@ -288,7 +288,7 @@ fn hovering_a_table_shows_its_handles_and_they_stay_while_the_pointer_reaches_fo
     s.click(at);
     assert_eq!(props(&s, t).cols(), 3);
     // far away they are gone
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.mv(s.screen(120.0, 560.0));
     assert!(tbl::handle_table(s.app()).is_none());
 }
@@ -336,7 +336,7 @@ fn resizing_the_table_scales_its_columns_and_rows() {
     let t = place_table(&mut s, 500.0, 300.0);
     s.key(Key::Escape);
     s.key(Key::Escape);
-    s.shell.app.selection = vec![t];
+    s.shell.session().selection = vec![t];
     s.frame(vec![]);
     let (corners, _) = crate::canvas::interact::selection_box(s.app()).unwrap();
     let br = s.app().view.to_screen(s.app().canvas_rect.min, corners[2]);
@@ -370,7 +370,7 @@ fn the_table_bar_fills_cells_and_adds_and_removes_rows_and_columns() {
     s.cmd_key(Key::Z);
     assert!(cell_fill(&s, t, 0, 0).is_none());
     // with no active cell a fill goes to every cell
-    s.shell.app.board.cell = None;
+    s.shell.session().board.cell = None;
     s.frame(vec![]);
     let orange = s.rect_of("board-table-fill-1");
     s.click(orange.center());
@@ -397,7 +397,7 @@ fn the_table_bar_fills_cells_and_adds_and_removes_rows_and_columns() {
     let rm_col = s.rect_of("board-table-remove-col");
     s.click(rm_col.center());
     assert_eq!(props(&s, t).cols(), 2);
-    s.shell.app.board.cell = Some(cell(&s, t, 1, 1));
+    s.shell.session().board.cell = Some(cell(&s, t, 1, 1));
     s.frame(vec![]);
     let rm_row = s.rect_of("board-table-remove-row");
     s.click(rm_row.center());
@@ -408,7 +408,7 @@ fn the_table_bar_fills_cells_and_adds_and_removes_rows_and_columns() {
     let mut s = board_sim();
     let t = place_table(&mut s, 500.0, 300.0);
     s.key(Key::Escape);
-    s.shell.app.board.cell = None;
+    s.shell.session().board.cell = None;
     s.frame(vec![]);
     for _ in 0..6 {
         let r = s.rect_of("board-table-remove-row");
@@ -452,7 +452,7 @@ fn a_table_moves_copies_and_deletes_as_one_object() {
     assert_ne!(cell(&s, copy, 0, 0), cell(&s, t, 0, 0));
     assert_eq!(s.app().doc.get(cell(&s, copy, 0, 0)).unwrap().parent, Some(copy));
     // deleting removes the cells too, and undo brings them back
-    s.shell.app.selection = vec![copy];
+    s.shell.session().selection = vec![copy];
     s.key(Key::Delete);
     assert_eq!(tables(&s).len(), 1);
     assert_eq!(s.app().doc.nodes.values().filter(|n| matches!(n.kind, NodeKind::TableCell(_))).count(), 6);
@@ -572,7 +572,7 @@ fn a_section_is_picked_by_its_title_or_border_not_its_empty_inside() {
     let mut s = board_sim();
     let sec = draw_section(&mut s, (100.0, 100.0), (700.0, 600.0));
     s.key(Key::Escape);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.frame(vec![]);
     let w = world(&s, sec);
     // inside: nothing (the canvas)
@@ -582,14 +582,14 @@ fn a_section_is_picked_by_its_title_or_border_not_its_empty_inside() {
     // the title pill above the top left corner
     s.click(s.screen(w.x + 20.0, w.y - 17.0));
     assert_eq!(s.app().selection, vec![sec]);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.frame(vec![]);
     // the border
     s.click(s.screen(w.x + 300.0, w.y + 2.0));
     assert_eq!(s.app().selection, vec![sec]);
     // a marquee started inside the section picks the notes in it
     let note = add_sticky(&mut s, 300.0, 300.0);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.frame(vec![]);
     s.mods = Modifiers::COMMAND;
     s.drag(s.screen(150.0, 150.0), s.screen(450.0, 450.0));
@@ -631,22 +631,22 @@ fn the_section_bar_sets_the_colour_renames_and_hides_the_contents() {
     assert!(section_props(&s, sec).contents_hidden);
     // hidden notes are neither drawn nor hit
     let w = world(&s, note);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.frame(vec![]);
     s.click(s.screen(w.x + 100.0, w.y + 100.0));
     assert!(!s.app().selection.contains(&note));
-    s.shell.app.selection = vec![sec];
+    s.shell.session().selection = vec![sec];
     s.frame(vec![]);
     let show = s.rect_of("board-section-hide");
     s.click(show.center());
     assert!(!section_props(&s, sec).contents_hidden);
-    s.shell.app.selection.clear();
+    s.shell.session().selection.clear();
     s.frame(vec![]);
     s.click(s.screen(w.x + 100.0, w.y + 100.0));
     assert!(s.app().selection.contains(&note), "the note can be picked again");
 
     // rename: the title is the node name
-    s.shell.app.selection = vec![sec];
+    s.shell.session().selection = vec![sec];
     s.frame(vec![]);
     let rn = s.rect_of("board-section-rename-btn");
     s.click(rn.center());

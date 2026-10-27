@@ -82,13 +82,13 @@ fn features_follow_the_selected_range_while_editing() {
     let mut s = popover_sim();
     let id = s.by_name("Continue");
     // open a text session, select "Con" and set a feature through the popover
-    crate::canvas::textsession::begin_text_edit(&mut s.shell.app, id);
+    crate::canvas::textsession::begin_text_edit(s.shell.session(), id);
     {
-        let sess = s.shell.app.canvas.text.as_mut().unwrap();
+        let sess = s.shell.session().canvas.text.as_mut().unwrap();
         sess.caret = 3;
         sess.anchor = 0;
     }
-    s.shell.app.props.pop = Some(crate::panels::effects::PopState {
+    s.shell.session().props.pop = Some(crate::panels::effects::PopState {
         kind: crate::panels::effects::PopKind::TextDetails,
         anchor: Rect::from_min_size(Pos2::new(1550.0, 330.0), Vec2::splat(24.0)),
         ids: vec![id],
