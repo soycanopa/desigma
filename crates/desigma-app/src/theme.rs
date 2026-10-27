@@ -503,9 +503,9 @@ pub const APP_TITLE: &str = "desigma";
 
 // ---------------------------------------------------------------- custom title bar
 /// Height of the custom title bar (window buttons, home, tabs) drawn in place of the native
-/// one. Twice the macOS traffic lights' center, so items aligned with the lights are also
-/// centered in the bar instead of hugging its top edge.
-pub const TITLE_BAR_H: f32 = 32.0;
+/// one. On macOS the native traffic lights are recentered onto the bar's middle line (see
+/// `titlebar::align_traffic_lights`), so every bar item and the lights share one axis.
+pub const TITLE_BAR_H: f32 = 38.0;
 /// The title bar sits a step darker than the editor chrome below it.
 pub const TITLE_BAR_BG: Color32 = rgb(0x18181B);
 /// A title-bar tab pill: height and horizontal padding around its label.

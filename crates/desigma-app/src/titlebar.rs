@@ -36,6 +36,8 @@ pub fn show(shell: &mut Shell, ui: &mut Ui, rect: Rect) {
 
     let mut act = Act::None;
     let cy = rect.center().y;
+    #[cfg(target_os = "macos")]
+    align_traffic_lights(cy);
 
     // ---- window buttons: macOS keeps its native traffic lights (the home button sits
     // right of them); other platforms get square buttons on the right
@@ -116,6 +118,41 @@ pub fn show(shell: &mut Shell, ui: &mut Ui, rect: Rect) {
         Act::Switch(i) => shell.switch_tab(i),
         Act::Close(i) => shell.close_tab(i),
         Act::NewFile => shell.open_new_file(TabOpen::NewFile),
+    }
+}
+
+/// macOS parks the native traffic lights near the window's top edge no matter how tall our bar
+/// is, so slide them down onto the bar's center line. Runs every frame but only writes when a
+/// button is off by half a point — the system resets them after fullscreen transitions and the
+/// like, and the next frame puts them back.
+#[cfg(target_os = "macos")]
+fn align_traffic_lights(bar_center_y: f32) {
+    use objc2::class;
+    use objc2::msg_send;
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSPoint, NSRect};
+
+    unsafe {
+        let app: Retained<AnyObject> = msg_send![class!(NSApplication), sharedApplication];
+        let win: Option<Retained<AnyObject>> = msg_send![&*app, mainWindow];
+        let Some(win) = win else { return };
+        // NSWindowStandardButton: 0 close, 1 miniaturize, 2 zoom.
+        for button in 0..3i64 {
+            let btn: Option<Retained<AnyObject>> = msg_send![&*win, standardWindowButton: button];
+            let Some(btn) = btn else { continue };
+            let frame: NSRect = msg_send![&*btn, frame];
+            // The buttons hang in a short titlebar container view pinned to the window's top
+            // (non-flipped, so its y runs up from the container's bottom).
+            let sv: Option<Retained<AnyObject>> = msg_send![&*btn, superview];
+            let Some(sv) = sv else { continue };
+            let sv_bounds: NSRect = msg_send![&*sv, bounds];
+            let desired_y = sv_bounds.size.height - f64::from(bar_center_y) - frame.size.height / 2.0;
+            if (frame.origin.y - desired_y).abs() < 0.5 {
+                continue;
+            }
+            let _: () = msg_send![&*btn, setFrameOrigin: NSPoint::new(frame.origin.x, desired_y)];
+        }
     }
 }
 

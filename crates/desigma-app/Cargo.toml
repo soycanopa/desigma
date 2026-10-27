@@ -53,10 +53,11 @@ roxmltree = "0.20"
 egui = "0.35"
 resvg = { version = "0.45", default-features = false }
 
-# Finder and browser opens arrive as Apple events (see src/macos.rs); the versions winit uses.
+# macOS only: Finder and browser opens arrive as Apple events (see `src/macos.rs`), and the
+# native traffic lights are repositioned onto the custom title bar (see `src/titlebar.rs`).
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", default-features = false, features = ["std", "NSAppleEventDescriptor", "NSAppleEventManager", "NSData", "NSString"] }
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSAppleEventDescriptor", "NSAppleEventManager", "NSData", "NSString", "NSGeometry"] }
 
 [build-dependencies]
 winresource = "0.1"
