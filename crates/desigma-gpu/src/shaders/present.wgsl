@@ -1,6 +1,14 @@
-// Draws the rendered page texture 1:1 into the viewport it is called with.
+// Draws the rendered page texture into the viewport it is called with: 1:1 normally, scaled and
+// shifted (bilinear) while a zoom gesture shows the previous frame.
 
 @group(0) @binding(0) var tex: texture_2d<f32>;
+
+struct View {
+    // source uv = uv * scale + offset; outside 0..1 nothing is drawn
+    scale: vec2<f32>,
+    offset: vec2<f32>,
+};
+@group(0) @binding(1) var<uniform> view: View;
 
 struct V {
     @builtin(position) pos: vec4<f32>,
@@ -17,9 +25,25 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> V {
     return o;
 }
 
+fn texel(p: vec2<i32>, dim: vec2<i32>) -> vec4<f32> {
+    return textureLoad(tex, clamp(p, vec2<i32>(0), dim - vec2<i32>(1)), 0);
+}
+
 @fragment
 fn fs_main(v: V) -> @location(0) vec4<f32> {
-    let dim = vec2<f32>(textureDimensions(tex));
-    let p = vec2<i32>(clamp(floor(v.uv * dim), vec2<f32>(0.0), dim - vec2<f32>(1.0)));
-    return textureLoad(tex, p, 0);
+    let dimi = vec2<i32>(textureDimensions(tex));
+    let dim = vec2<f32>(dimi);
+    let suv = v.uv * view.scale + view.offset;
+    if (any(suv < vec2<f32>(0.0)) || any(suv > vec2<f32>(1.0))) {
+        return vec4<f32>(0.0);
+    }
+    if (all(view.scale == vec2<f32>(1.0)) && all(view.offset == vec2<f32>(0.0))) {
+        return texel(vec2<i32>(floor(v.uv * dim)), dimi);
+    }
+    let s = suv * dim - vec2<f32>(0.5);
+    let p = vec2<i32>(floor(s));
+    let f = s - floor(s);
+    let top = mix(texel(p, dimi), texel(p + vec2<i32>(1, 0), dimi), f.x);
+    let bottom = mix(texel(p + vec2<i32>(0, 1), dimi), texel(p + vec2<i32>(1, 1), dimi), f.x);
+    return mix(top, bottom, f.y);
 }

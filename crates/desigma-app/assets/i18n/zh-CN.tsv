@@ -1,0 +1,426 @@
+# Simplified Chinese (zh-CN) UI strings for desigma.
+#
+# One entry per line: the English text exactly as it appears in the code, a TAB, then the
+# translation. Lines starting with # and blank lines are ignored. English text without an
+# entry is shown in English. See crates/desigma-app/src/i18n.rs.
+
+# ---- main menu
+File	文件
+Edit	编辑
+View	视图
+Object	对象
+Text	文本
+Arrange	排列
+Vector	矢量
+Plugins	插件
+Widgets	小组件
+Preferences	偏好设置
+Language	语言
+Libraries	资源库
+Help	帮助
+Back to files	返回文件列表
+Actions…	操作…
+Not available	不可用
+
+# ---- File
+New design file	新建设计文件
+New board	新建白板
+New deck	新建演示文稿
+Open…	打开…
+Open	打开
+Save	保存
+Save as…	另存为…
+Save to library…	保存到资源库…
+Save to version history…	保存到版本历史…
+Show version history	显示版本历史
+Export selection as PNG…	将所选内容导出为 PNG…
+Export current slide as PDF…	将当前幻灯片导出为 PDF…
+Export all slides as PDF…	将所有幻灯片导出为 PDF…
+Share…	分享…
+Join session…	加入协作会话…
+
+# ---- Edit
+Undo	撤销
+Redo	重做
+Copy	复制
+Paste	粘贴
+Duplicate	创建副本
+Delete	删除
+Select all	全选
+Select inverse	反选
+Select children	选择子图层
+Select parent	选择父级
+Select matching layers	选择匹配的图层
+Select all with same	选择所有相同的
+Select all with same fill	选择所有相同填充的图层
+Select all with same stroke	选择所有相同描边的图层
+Select all with same effect	选择所有相同效果的图层
+Select all with same font	选择所有相同字体的图层
+Select all with same instance	选择所有相同实例
+Find and replace…	查找和替换…
+
+# ---- View
+Pixel grid	像素网格
+Snap to pixel grid	对齐像素网格
+Rulers	标尺
+Layout guides	布局参考线
+Show/Hide UI	显示/隐藏界面
+Zoom in	放大
+Zoom out	缩小
+Zoom to 100%	缩放至 100%
+Zoom to 50%	缩放至 50%
+Zoom to 200%	缩放至 200%
+Zoom to fit	缩放至适合大小
+Zoom to selection	缩放至所选内容
+
+# ---- Object
+Group selection	编组所选
+Ungroup	取消编组
+Frame selection	用画框包裹所选
+Add auto layout	添加自动布局
+Create component	创建组件
+Detach instance	分离实例
+Combine as variants	合并为变体
+Go to main component	转到主组件
+Instance swap	实例替换
+Mark as ready for dev	标记为可开发
+Mark as completed	标记为已完成
+Remove dev status	移除开发状态
+Move to top level	移至顶层
+New group with selection	用所选内容新建分组
+Reset all changes	重置所有更改
+
+# ---- Text
+Bold	粗体
+Italic	斜体
+Underline	下划线
+Bulleted list	无序列表
+Numbered list	有序列表
+Increase font size	增大字号
+Decrease font size	减小字号
+
+# ---- Arrange
+Bring forward	上移一层
+Send backward	下移一层
+Bring to front	置于顶层
+Send to back	置于底层
+Align left	左对齐
+Align horizontal centers	水平居中对齐
+Align right	右对齐
+Align top	顶部对齐
+Align vertical centers	垂直居中对齐
+Align bottom	底部对齐
+Distribute spacing	均匀分布间距
+
+# ---- Vector
+Outline stroke	轮廓化描边
+Flatten	拼合
+Boolean groups	布尔运算
+Boolean	布尔运算
+Union selection	合并形状
+Subtract selection	减去顶层
+Intersect selection	相交
+Exclude selection	排除重叠
+Shape builder	形状生成器
+Edit vertices	编辑锚点
+Simplify path	简化路径
+Join	连接
+Split	拆分
+
+# ---- Preferences
+Your name…	你的名字…
+Use GPU rendering	使用 GPU 渲染
+Check for updates automatically	自动检查更新
+Allow MCP agents to control this editor	允许 MCP 智能体控制此编辑器
+Claude…	连接 Claude…
+
+# ---- Help
+Command palette	命令面板
+Keyboard shortcuts	键盘快捷键
+About desigma	关于 desigma
+Check for updates…	检查更新…
+desigma on GitHub	GitHub 上的 desigma
+
+# ---- other menus (home screen, layers, variables, versions, comments)
+Rename	重命名
+Rename group	重命名分组
+Rename mode	重命名模式
+Duplicate as new file	复制为新文件
+Duplicate mode	复制模式
+Delete mode	删除模式
+Delete message	删除消息
+Delete thread	删除讨论
+Edit variable	编辑变量
+Import variables...	导入变量...
+Export variables...	导出变量...
+Move to trash	移到废纸篓
+Move to…	移动到…
+New folder	新建文件夹
+New subfolder	新建子文件夹
+No color styles	没有颜色样式
+Open in new window	在新窗口中打开
+Restore this version	恢复此版本
+Select	选择
+Set as default	设为默认
+Shader	着色器
+Show in folder	在文件夹中显示
+
+# ---- tools
+Move	移动
+Hand tool	抓手工具
+Scale	缩放
+Frame	画框
+Section	分区
+Slice	切片
+Rectangle	矩形
+Line	直线
+Arrow	箭头
+Ellipse	椭圆
+Polygon	多边形
+Star	星形
+Place image	置入图片
+Image/video…	图片/视频…
+Pen	钢笔
+Pencil	铅笔
+Add comment	添加评论
+Comment	评论
+Sticky note	便利贴
+Shape	形状
+Connector	连接线
+Stamp	印章
+Table	表格
+Code block	代码块
+Marker	马克笔
+Highlighter	荧光笔
+Washi tape	和纸胶带
+Eraser	橡皮擦
+
+# ---- left rail and panel titles
+Assets	资源
+Tools	工具
+Variables	变量
+Pages	页面
+Layers	图层
+Design	设计
+Prototype	原型
+Motion	动效
+Beta	测试版
+
+# ---- inspector sections
+Alignment	对齐
+Animations	动画
+Annotations	标注
+Appearance	外观
+Auto layout	自动布局
+Background	背景
+Code	代码
+Colors	颜色
+Component properties	组件属性
+Constraints	约束
+Corner radius	圆角
+Dev links	开发链接
+Device	设备
+Dimensions	尺寸
+Effects	效果
+Export	导出
+Fill	填充
+Flow	流程
+Flow starting point	流程起点
+Flow starting points	流程起点
+Handles	控制柄
+Interactions	交互
+Layout	布局
+Layout guide	布局参考线
+Overflow	溢出
+Padding	内边距
+Page	页面
+Position	位置
+Properties	属性
+Resizing	尺寸调整
+Rotation	旋转
+Scroll behavior	滚动行为
+Selection colors	所选颜色
+Stroke	描边
+Stroke cap	描边端点
+Styles	样式
+Transform	变换
+Typography	文字
+Variables used	使用的变量
+Video	视频
+
+# ======== batch 2: toasts, home screen, dialogs ========
+
+# ---- templates: {} stands for text filled in at run time (names, paths, error details)
+Edit failed: {}	编辑失败：{}
+Export failed: {}	导出失败：{}
+Variable edit failed: {}	变量编辑失败：{}
+Update failed: {}	更新失败：{}
+Unpublish failed: {}	取消发布失败：{}
+Unpublished {}	已取消发布 {}
+Saved {}	已保存 {}
+Exported {}	已导出 {}
+Opened {}	已打开 {}
+Opened {}. Not carried over: {}	已打开 {}。未能导入：{}
+Moved {} to the trash	已将 {} 移到废纸篓
+{} left	{} 已离开
+desigma {} is up to date	desigma {} 已是最新版本
+Couldn't check for updates: {}	无法检查更新：{}
+Font unavailable: {}	字体不可用：{}
+Trash ({})	废纸篓（{}）
+Version {}	版本 {}
+Version {} (development build, it does not check for updates)	版本 {}（开发版本，不检查更新）
+Library: {}	资源库：{}
+No files match “{}”	没有与“{}”匹配的文件
+{} people will be disconnected.	{} 人将被断开连接。
+
+# ---- toasts
+Agent bridge on — MCP clients can now edit this document	智能体桥接已开启：MCP 客户端现在可以编辑此文档
+Blocked: only http(s) and mailto links open	已阻止：只能打开 http(s) 和 mailto 链接
+Cannot make a poster for this video	无法为此视频生成封面
+Cannot read file	无法读取文件
+Combined as variants	已合并为变体
+Comments are not available in the offline editor	离线编辑器中不能使用评论
+Copied code	已复制代码
+Detach the instance or component before flattening	请先分离实例或组件再拼合
+Duplicated	已创建副本
+Enter an http(s) or mailto link	请输入 http(s) 或 mailto 链接
+Every frame on this page already starts a flow	此页面上的每个画框都已是流程起点
+Export failed	导出失败
+GPU rendering is not available on this system	此系统不支持 GPU 渲染
+Go back to the current version before sharing	请先回到当前版本再分享
+Go back to the current version first	请先回到当前版本
+Joined the session	已加入会话
+Left the session. The file stays open as your own copy	已离开会话。文件仍保持打开，作为你自己的副本
+Library could not be loaded	无法加载资源库
+Library is not available	资源库不可用
+Library style could not be loaded	无法加载资源库样式
+Library variable could not be loaded	无法加载资源库变量
+Link copied	已复制链接
+Main component not found	找不到主组件
+Marked completed	已标记为完成
+Moved	已移动
+No votes left	没有剩余票数
+Not a supported video file (MP4, MOV or WebM)	不支持的视频文件（支持 MP4、MOV 或 WebM）
+Nothing to download	没有可下载的内容
+Nothing to export	没有可导出的内容
+Nothing to export yet: add keyframes or an animation first	暂无可导出的内容：请先添加关键帧或动画
+Nothing to flatten	没有可拼合的内容
+Nothing to publish: create components, styles or variables first	没有可发布的内容：请先创建组件、样式或变量
+Nothing to simplify	没有可简化的内容
+Opened in a new window	已在新窗口中打开
+Plugin installed. Open it from the Plugins library.	插件已安装。可在插件库中打开。
+Reconnected	已重新连接
+Restored	已恢复
+Save to library to keep version history	保存到资源库以保留版本历史
+Select a frame or section to mark it Ready for dev	选择一个画框或分区，将其标记为可开发
+Select a layer to add a keyframe	选择一个图层以添加关键帧
+Select a layer to export	选择要导出的图层
+Select a layer with a shape to flatten	选择带有形状的图层进行拼合
+Select a layer with a stroke to outline	选择带有描边的图层进行轮廓化
+Select a vertex or click a segment to split the path	选择一个锚点或点击一段路径来拆分路径
+Select three or more layers to distribute	选择三个或更多图层来分布
+Select two or more layers to combine	选择两个或更多图层来合并
+Select two or more overlapping shapes to use the shape builder	选择两个或更多重叠的形状来使用形状生成器
+Select two vertices to join	选择两个锚点来连接
+Stop sharing to look at old versions	停止分享后才能查看旧版本
+Stop sharing to restore an old version	停止分享后才能恢复旧版本
+Stopped sharing	已停止分享
+The SVG is not valid UTF-8	此 SVG 不是有效的 UTF-8 文本
+The projects library is unavailable	项目资源库不可用
+There is no snapshot to compare with	没有可供比较的快照
+This is a development build, so it does not check for updates	这是开发版本，因此不会检查更新
+Those comments are already in this file	这些评论已在此文件中
+Trash emptied	已清空废纸篓
+Version moved to the trash	已将版本移到废纸篓
+Version restored. Undo brings the previous state back	已恢复版本。撤销可回到之前的状态
+Viewing an old version is read-only	查看旧版本时为只读
+desigma, a Figma-compatible design editor	desigma，兼容 Figma 文件的设计编辑器
+
+# ---- home screen
+Search files	搜索文件
+Recents	最近
+Starred	已加星标
+Projects	项目
+New project	新建项目
+No projects yet	还没有项目
+Trash	废纸篓
+Empty trash	清空废纸篓
+Join session	加入会话
+Import…	导入…
+List view	列表视图
+Grid view	网格视图
+Last opened	最近打开
+Last modified	最近修改
+Name	名称
+Project	项目
+Edited	编辑时间
+Opened	打开时间
+Board	白板
+Restore	恢复
+Items stay here until you empty the trash. Emptying it deletes them permanently.	项目会保留在这里，直到你清空废纸篓。清空后将永久删除。
+No files yet	还没有文件
+Create a design file, or import a .fig, .pen, .svg or .desigma file to get started.	新建一个设计文件，或导入 .fig、.pen、.svg 或 .desigma 文件开始使用。
+Nothing starred	没有加星标的文件
+Right-click a file and choose Star to keep it handy here.	右键点击文件并选择“加星标”，即可在这里快速找到它。
+This project is empty	此项目为空
+Create a design file here, or drag files in from other projects.	在这里新建设计文件，或从其他项目拖入文件。
+Trash is empty	废纸篓为空
+Files and projects you delete wait here until you empty the trash.	你删除的文件和项目会保留在这里，直到你清空废纸篓。
+Try a different name.	换个名称试试。
+
+# ---- dialogs
+Close	关闭
+Cancel	取消
+Discard	放弃
+Leave	离开
+Discard unsaved changes?	放弃未保存的更改？
+You are in a live session. Opening this leaves it.	你正在实时会话中。打开此项将离开会话。
+Joining a session replaces this document.	加入会话将替换当前文档。
+Opening this file replaces the current document.	打开此文件将替换当前文档。
+Restarting to install the update closes this document.	重启以安装更新将关闭此文档。
+Open a file	打开文件
+Undo / redo	撤销 / 重做
+Group / ungroup	编组 / 取消编组
+Zoom to fit / selection	缩放至适合大小 / 所选内容
+Show or hide the UI	显示或隐藏界面
+Present	演示
+desigma is a free, open-source design editor written in Rust.	desigma 是一款用 Rust 编写的免费开源设计编辑器。
+There are no accounts, plans or cloud. Your files stay on this computer.	没有账户、套餐或云端。你的文件保存在这台电脑上。
+Open the GitHub repository?	打开 GitHub 仓库？
+This opens the desigma source code page in your web browser.	这将在网页浏览器中打开 desigma 的源代码页面。
+This opens the link in your web browser.	这将在网页浏览器中打开该链接。
+Empty the trash?	清空废纸篓？
+1 item will be permanently deleted.	1 个项目将被永久删除。
+These items will be permanently deleted.	这些项目将被永久删除。
+This cannot be undone.	此操作无法撤销。
+Stop sharing?	停止分享？
+Stop sharing	停止分享
+Leave the session?	离开会话？
+You will be disconnected. Save a copy first if you want to keep this file.	你将断开连接。如需保留此文件，请先保存一份副本。
+Sharing	分享中
+
+# ---- relative times on file cards
+Edited {}	编辑于{}
+just now	刚刚
+yesterday	昨天
+1 minute ago	1 分钟前
+1 hour ago	1 小时前
+1 day ago	1 天前
+1 week ago	1 周前
+1 month ago	1 个月前
+1 year ago	1 年前
+{} minutes ago	{} 分钟前
+{} hours ago	{} 小时前
+{} days ago	{} 天前
+{} weeks ago	{} 周前
+{} months ago	{} 个月前
+{} years ago	{} 年前
+
+# ---- external file watch
+File changed on disk	文件已在磁盘上被修改
+Another program changed this file on disk. You have unsaved edits.	另一个程序改了这个文件，而你有未保存的修改。
+Keep my changes	保留我的修改
+Reload	重新载入
+Reloaded {} (changed on disk)	已重新载入 {}（磁盘上有变化）
+Keep both (save a copy)	两边都留着（另存一份）
+Saved your edits to {}	已把你的修改另存为 {}

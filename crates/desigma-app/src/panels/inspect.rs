@@ -210,7 +210,7 @@ pub(crate) fn section_title(ui: &Ui, c: &mut Cur, label: &str) {
     widgets::hline(ui.painter(), c.x0, c.x0 + c.w, c.oy + c.y, theme::BORDER);
     c.y += 1.0;
     let r = c.rect(PAD, 0.0, c.w - 2.0 * PAD, theme::SECTION_TITLE_HEIGHT);
-    ui.painter().text(Pos2::new(r.left(), r.center().y), Align2::LEFT_CENTER, label, theme::font_body_strong(), theme::TEXT);
+    ui.painter().text(Pos2::new(r.left(), r.center().y), Align2::LEFT_CENTER, crate::i18n::tr(label), theme::font_body_strong(), theme::TEXT);
     c.y += theme::SECTION_TITLE_HEIGHT - 8.0;
 }
 

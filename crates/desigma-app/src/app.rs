@@ -141,6 +141,10 @@ pub struct App {
     pub libs: crate::libraries::LibrariesState,
     pub plugins: crate::plugins::PluginsState,
     pub bridge: crate::bridge::BridgeState,
+    /// Preferences / home → Claude… connection dialog.
+    pub mcp_dialog: bool,
+    /// Why the last Claude connection attempt failed, shown in the dialog.
+    pub mcp_error: Option<String>,
     pub proto: crate::proto::ProtoState,
     /// Find and replace panel state (Ctrl+F).
     pub find: crate::find::FindState,
@@ -193,6 +197,8 @@ pub struct App {
     pub file_hash: Option<u64>,
     /// An open waiting for the answer to "Discard unsaved changes?".
     pub pending_open: Option<crate::instance::Open>,
+    /// Watching the open file for changes made by other programs (see `extwatch.rs`).
+    pub ext_watch: Option<crate::extwatch::Watch>,
 }
 
 impl App {
@@ -217,6 +223,8 @@ impl App {
             libs: Default::default(),
             plugins: Default::default(),
             bridge: Default::default(),
+            mcp_dialog: false,
+            mcp_error: None,
             proto: Default::default(),
             find: Default::default(),
             ui: UiState { pixel_grid: true, ..UiState::default() },
@@ -249,6 +257,7 @@ impl App {
             collab: Default::default(),
             file_hash: None,
             pending_open: None,
+            ext_watch: None,
         }
     }
 
@@ -278,7 +287,9 @@ impl App {
         self.toast = Some(Toast { text: text.into(), until: self.now + theme::TOAST_SECONDS, error });
     }
 
-    /// Marks the document as modified so the canvas texture is re-rendered.
+    /// Marks the document as modified so the canvas texture is re-rendered. Not for view
+    /// changes (pan, zoom): the renderers follow the viewport by themselves, and a revision bump
+    /// re-indexes the page and makes autosave hash the whole document.
     pub fn changed(&mut self) {
         self.canvas.dirty = true;
     }

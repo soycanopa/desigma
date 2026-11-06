@@ -74,7 +74,7 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
         }
         icons::paint(&p, *icon, ic, theme::RAIL_ICON_SIZE, theme::ICON);
         let font = if selected { theme::font_small_strong() } else { theme::font_small() };
-        p.text(Pos2::new(ir.center().x, ir.top() + theme::RAIL_LABEL_CENTER_Y), Align2::CENTER_CENTER, *label, font, theme::TEXT);
+        p.text(Pos2::new(ir.center().x, ir.top() + theme::RAIL_LABEL_CENTER_Y), Align2::CENTER_CENTER, crate::i18n::tr(label), font, theme::TEXT);
         if resp.clicked() {
             if *item == RailItem::Plugins {
                 app.open_plugins();

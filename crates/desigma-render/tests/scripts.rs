@@ -1,4 +1,4 @@
-//! Arabic, Hebrew and Devanagari shaping with the Noto Sans fallbacks that `desigma-fonts`
+//! Arabic, Hebrew, Devanagari and CJK shaping with the Noto Sans fallbacks that `desigma-fonts`
 //! fetches on demand. These need network access to Fontsource (the fonts are cached in a temp
 //! directory), so they are ignored by default: `cargo test -p desigma-render --test scripts -- --ignored`.
 
@@ -92,4 +92,21 @@ fn devanagari_conjuncts_and_vowel_signs_form_clusters() {
     assert!(gl.windows(2).all(|w| w[0].x <= w[1].x));
     assert!(!g.lines[0].rtl);
     assert!(layout_ink(&p).is_some());
+}
+
+#[test]
+#[ignore = "needs network access to api.fontsource.org"]
+fn chinese_japanese_and_korean_draw_real_glyphs() {
+    for script in [Script::Han, Script::Kana, Script::Hangul] {
+        load(script);
+    }
+    for (a, b) in [("\u{7528}", "\u{6237}"), ("\u{3042}", "\u{30C6}"), ("\u{D55C}", "\u{AE00}")] {
+        let ia = layout_ink(&props(a));
+        let ib = layout_ink(&props(b));
+        assert!(ia.is_some() && ib.is_some() && ia != ib, "{a} and {b} draw distinct outlines");
+    }
+    // mixed Latin + Han lays out on one line with both runs present
+    let g = text_geometry(&props("UI \u{7528}\u{6237}\u{5217}\u{8868}"), Vec2::ZERO);
+    assert_eq!(g.lines.len(), 1);
+    assert!(g.lines[0].glyphs.len() >= 6, "{:?}", g.lines[0].glyphs);
 }

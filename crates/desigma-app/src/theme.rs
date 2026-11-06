@@ -594,6 +594,64 @@ pub fn install_fonts(ctx: &egui::Context) {
     semibold_family.extend(fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default());
     fonts.families.insert(FontFamily::Name(FAMILY_SEMIBOLD.into()), semibold_family);
     ctx.set_fonts(fonts);
+    install_cjk_fallback(ctx);
+}
+
+/// System fonts with Chinese/Japanese (first found wins), then Korean, for UI labels such as
+/// file and project names. Inter has none of these glyphs. Read from disk on a worker thread
+/// (the files are tens of MB) and appended as the last fallback of every UI family.
+const CJK_FONTS: &[&str] = &[
+    // Linux (fonts-noto-cjk, fonts-wqy)
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    // macOS
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+    // Windows
+    "C:\\Windows\\Fonts\\msyh.ttc",
+    "C:\\Windows\\Fonts\\simsun.ttc",
+    "C:\\Windows\\Fonts\\YuGothR.ttc",
+];
+const KOREAN_FONTS: &[&str] =
+    &["/System/Library/Fonts/AppleSDGothicNeo.ttc", "C:\\Windows\\Fonts\\malgun.ttf", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"];
+
+fn install_cjk_fallback(ctx: &egui::Context) {
+    // Tests lay out text deterministically, whatever fonts the machine has.
+    if cfg!(test) {
+        return;
+    }
+    let ctx = ctx.clone();
+    std::thread::spawn(move || {
+        let cjk = first_readable(CJK_FONTS);
+        // Noto Sans CJK already covers Hangul.
+        let korean = if cjk.as_ref().is_some_and(|(p, _)| p.contains("NotoSansCJK")) { None } else { first_readable(KOREAN_FONTS) };
+        let mut added = false;
+        for (name, found) in [("ui-cjk", cjk), ("ui-korean", korean)] {
+            let Some((_, bytes)) = found else { continue };
+            let families = [
+                FontFamily::Proportional,
+                FontFamily::Monospace,
+                FontFamily::Name(FAMILY_STRONG.into()),
+                FontFamily::Name(FAMILY_MEDIUM.into()),
+                FontFamily::Name(FAMILY_SEMIBOLD.into()),
+            ]
+            .into_iter()
+            .map(|family| egui::epaint::text::InsertFontFamily { family, priority: egui::epaint::text::FontPriority::Lowest })
+            .collect();
+            ctx.add_font(egui::epaint::text::FontInsert::new(name, egui::FontData::from_owned(bytes), families));
+            added = true;
+        }
+        if added {
+            ctx.request_repaint();
+        }
+    });
+}
+
+fn first_readable(paths: &[&str]) -> Option<(String, Vec<u8>)> {
+    paths.iter().find_map(|p| std::fs::read(p).ok().map(|b| (p.to_string(), b)))
 }
 
 /// Perceived luminance test used to choose label colors on the canvas.

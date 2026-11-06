@@ -1,0 +1,35 @@
+{
+  "version": "2.9",
+  "children": [
+    {
+      "type": "frame",
+      "id": "bi8Au",
+      "x": -150,
+      "y": -136,
+      "name": "Frame",
+      "clip": true,
+      "width": 1024,
+      "height": 1024,
+      "fill": "#ffffff",
+      "layout": "none",
+      "children": [
+        {
+          "type": "path",
+          "id": "BGQPu",
+          "x": 256,
+          "y": 288,
+          "geometry": "M8 14l8 0m-16-2l6-6-6-6",
+          "width": 512,
+          "height": 448,
+          "stroke": {
+            "align": "center",
+            "thickness": 48,
+            "join": "round",
+            "cap": "round",
+            "fill": "#9b9bbd"
+          }
+        }
+      ]
+    }
+  ]
+}

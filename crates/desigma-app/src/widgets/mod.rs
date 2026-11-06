@@ -168,7 +168,7 @@ pub fn icon_button(ui: &mut Ui, rect: Rect, id: impl crate::widgets::Key, icon: 
     };
     paint_icon_in(p, rect, icon, 16.0, col);
     if !tip.is_empty() {
-        return r.on_hover_text(tip);
+        return r.on_hover_text(crate::i18n::tr(tip));
     }
     r
 }

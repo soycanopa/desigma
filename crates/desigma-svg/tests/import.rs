@@ -1,7 +1,7 @@
 //! Structure of imported documents.
 
 use desigma_doc::*;
-use desigma_svg::{import_svg, import_svg_named, looks_like_svg, svg_to_nodes};
+use desigma_svg::{import_svg, import_svg_named, import_svg_named_with, looks_like_svg, svg_to_nodes, ImportOptions};
 
 fn import(svg: &str) -> (Document, NodeId) {
     let mut doc = Document::new("t");
@@ -353,4 +353,188 @@ fn errors_and_sniffing() {
     assert!(!looks_like_svg("hello <svg>"));
     let id = import_svg_named("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"5\" height=\"5\"/>", "logo", &mut doc, page, Vec2::ZERO).unwrap();
     assert_eq!(doc.get(id).unwrap().name, "logo");
+}
+
+#[test]
+fn unnamed_multi_child_groups_stay_groups() {
+    // Hand-written artboards: each <g> holds a background and its content (#34).
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300">
+      <g><rect width="400" height="300" fill="#eee"/><rect x="20" y="20" width="50" height="50" fill="#f00"/></g>
+      <g><rect x="500" width="400" height="300" fill="#ddd"/><rect x="520" y="20" width="50" height="50" fill="#00f"/></g>
+    </svg>"##;
+    let (doc, root) = import(svg);
+    let top = kids(&doc, root);
+    assert_eq!(top.len(), 2, "{}", dump(&doc, root));
+    assert!(top.iter().all(|g| matches!(g.kind, NodeKind::Group) && g.children.len() == 2 && g.name == "Group"), "{}", dump(&doc, root));
+    // A single-child wrapper still folds into its child, and desigma's own export wrappers
+    // (data-name) still join their parent.
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <g><rect width="10" height="10" fill="#f00"/></g>
+      <g data-name="Wrapper"><rect x="20" width="10" height="10" fill="#0f0"/><rect x="40" width="10" height="10" fill="#00f"/></g>
+    </svg>"##;
+    let (doc, root) = import(svg);
+    assert!(kids(&doc, root).iter().all(|n| matches!(n.kind, NodeKind::Rectangle)), "{}", dump(&doc, root));
+}
+
+fn png_file(path: &std::path::Path) {
+    image::RgbaImage::from_pixel(4, 2, image::Rgba([0, 128, 255, 255])).save(path).unwrap();
+}
+
+fn import_file(dir: &std::path::Path, svg: &str) -> Document {
+    let mut doc = Document::new("t");
+    let page = doc.add_page("Page 1");
+    import_svg_named_with(svg, "f", &mut doc, page, Vec2::ZERO, &ImportOptions { base_dir: Some(dir.to_path_buf()) }).unwrap();
+    doc
+}
+
+#[test]
+fn images_next_to_the_svg_file_load_and_others_do_not() {
+    let base = std::env::temp_dir().join(format!("desigma-svg-href-{}", std::process::id()));
+    let dir = base.join("design");
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    png_file(&dir.join("assets/hero image.png"));
+    png_file(&base.join("outside.png"));
+    let svg = |href: &str| {
+        format!(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="40" height="20"><image width="20" height="10" xlink:href="{href}"/></svg>"#
+        )
+    };
+    let image_count = |doc: &Document| doc.images.len();
+
+    let doc = import_file(&dir, &svg("assets/hero%20image.png"));
+    assert_eq!(image_count(&doc), 1, "relative image next to the SVG is embedded");
+    let doc = import_file(&dir, &svg("./assets/hero image.png"));
+    assert_eq!(image_count(&doc), 1);
+
+    // Outside the SVG's folder, absolute paths and URLs are never read.
+    let outside = base.join("outside.png");
+    for href in ["../outside.png", outside.to_str().unwrap(), "file:///etc/hostname", "https://example.com/a.png"] {
+        let doc = import_file(&dir, &svg(href));
+        assert_eq!(image_count(&doc), 0, "{href}");
+    }
+    // Without a base folder (paste, MCP text), no file is read at all.
+    let (doc, _) = import(&svg("assets/hero%20image.png"));
+    assert_eq!(image_count(&doc), 0);
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// Every Text node under `id`, in document order.
+fn texts(doc: &Document, id: NodeId) -> Vec<&Node> {
+    let mut ids = Vec::new();
+    doc.walk(id, |n, _| {
+        if matches!(n.kind, NodeKind::Text(_)) {
+            ids.push(n.id);
+        }
+    });
+    ids.iter().filter_map(|i| doc.get(*i)).collect()
+}
+
+/// Content of every Text node under `id`, in document order.
+fn text_contents(doc: &Document, id: NodeId) -> Vec<String> {
+    let mut out = Vec::new();
+    doc.walk(id, |n, _| {
+        if let NodeKind::Text(t) = &n.kind {
+            out.push(t.content.clone());
+        }
+    });
+    out
+}
+
+#[test]
+fn text_outside_the_bundled_font_keeps_its_content() {
+    // usvg only knows the bundled Inter face, so a font family it cannot find lays
+    // out zero glyphs and the element used to vanish (no node, no pixels). The
+    // resolved chunks are kept so an editable Text node still comes out.
+    let (doc, id) = import(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+          <text x="20" y="40" font-family="PingFang SC" font-size="12" font-weight="500" fill="#64748b">用户名</text>
+        </svg>"##,
+    );
+    let k = kids(&doc, id);
+    assert_eq!(k.len(), 1, "{}", dump(&doc, id));
+    let NodeKind::Text(t) = &k[0].kind else { panic!("{}", dump(&doc, id)) };
+    assert_eq!(t.content, "用户名");
+    assert_eq!((t.style.font_size, t.style.font_weight), (12.0, 500));
+    assert_eq!(t.style.font_family, "PingFang SC");
+    assert_eq!(k[0].transform.tx, 20.0);
+    // Baseline `y=40`: the box sits above it, not on it.
+    assert!(k[0].transform.ty < 40.0 && k[0].transform.ty > 25.0, "{}", dump(&doc, id));
+}
+
+#[test]
+fn shaped_text_is_not_duplicated_by_the_chunk_fallback() {
+    let (doc, id) = import(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+          <text x="20" y="40" font-family="Inter" font-size="16" fill="#000">Hello</text>
+          <text x="20" y="80" font-family="PingFang SC" font-size="12" fill="#000">你好</text>
+        </svg>"##,
+    );
+    assert_eq!(text_contents(&doc, id), vec!["Hello", "你好"], "{}", dump(&doc, id));
+}
+
+#[test]
+fn unshaped_text_in_a_translated_group_keeps_its_place_and_tspans() {
+    // What Figma and Illustrator write: text wrapped in translated groups, one
+    // <tspan> per style run, no x/y on the spans.
+    let (doc, id) = import(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+          <g transform="translate(30 10)">
+            <text x="5" y="40" font-family="PingFang SC" font-size="12"><tspan>用户</tspan><tspan font-weight="700">名</tspan></text>
+          </g>
+        </svg>"##,
+    );
+    let t = texts(&doc, id);
+    assert_eq!(t.len(), 1, "{}", dump(&doc, id));
+    let NodeKind::Text(text) = &t[0].kind else { unreachable!() };
+    assert_eq!(text.content, "用户名");
+    assert_eq!(text.style.font_family, "PingFang SC");
+    // 30 from the group, 5 from the element.
+    assert_eq!(t[0].transform.tx, 35.0, "{}", dump(&doc, id));
+}
+
+#[test]
+fn unshaped_text_follows_the_viewbox_scale() {
+    let (doc, id) = import(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24">
+          <rect width="4" height="4" fill="#00f"/>
+          <text x="6" y="12" font-family="PingFang SC" font-size="4">汉字</text>
+        </svg>"##,
+    );
+    let t = texts(&doc, id);
+    assert_eq!(t.len(), 1, "{}", dump(&doc, id));
+    // The viewBox scales user units by 2; the text box has to scale with it, like
+    // the rect next to it (the scale may live on the text or on a group around it).
+    let w = doc.world_transform(t[0].id);
+    assert_eq!((w.a, w.d), (2.0, 2.0), "{}", dump(&doc, id));
+    // `import` places the frame at (100, 50); the user-space x=6 becomes 2×6.
+    assert!((w.tx - 100.0 - 12.0).abs() < 1e-3, "{}", dump(&doc, id));
+    assert!((w.ty - 50.0 - 2.0 * t[0].transform.ty).abs() < 1e-3, "{}", dump(&doc, id));
+}
+
+#[test]
+fn text_kept_as_outlines_is_not_emitted_twice() {
+    // Vertical text with a font usvg does have: collect() refuses it, the glyphs
+    // flatten to real outlines — so no Text node may be added on top.
+    let (doc, id) = import(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+          <text x="20" y="40" font-family="Inter" font-size="16" writing-mode="vertical-rl">Hello</text>
+        </svg>"##,
+    );
+    assert!(texts(&doc, id).is_empty(), "{}", dump(&doc, id));
+    assert!(kids(&doc, id).iter().any(|n| matches!(n.kind, NodeKind::Vector { .. })), "{}", dump(&doc, id));
+}
+
+#[test]
+fn unshaped_text_inherits_fill_and_font_from_its_group() {
+    let (doc, id) = import(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+          <g fill="#ff0000" font-size="20"><text x="10" y="30" font-family="PingFang SC">汉字</text></g>
+        </svg>"##,
+    );
+    let t = texts(&doc, id);
+    assert_eq!(t.len(), 1, "{}", dump(&doc, id));
+    let NodeKind::Text(text) = &t[0].kind else { unreachable!() };
+    assert_eq!(text.style.font_size, 20.0, "{}", dump(&doc, id));
+    assert_eq!(text.style.fills.len(), 1, "{}", dump(&doc, id));
+    assert!(matches!(text.style.fills[0].kind, PaintKind::Solid(c) if c == Color::from_hex("#ff0000").unwrap()), "{}", dump(&doc, id));
 }

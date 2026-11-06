@@ -1,0 +1,163 @@
+// Written for desigma's tests from the examples in the .pen format documentation.
+{
+  "version": "2.21",
+  "themes": { "mode": ["light", "dark"], "spacing": ["regular", "condensed"] },
+  "variables": {
+    "color.background": {
+      "type": "color",
+      "value": [
+        { "value": "#FFFFFF", "theme": { "mode": "light" } },
+        { "value": "#000000", "theme": { "mode": "dark" } }
+      ]
+    },
+    "color.text": {
+      "type": "color",
+      "value": [
+        { "value": "#333333", "theme": { "mode": "light" } },
+        { "value": "#AAAAAA", "theme": { "mode": "dark" } }
+      ]
+    },
+    "text.title": {
+      "type": "number",
+      "value": [
+        { "value": 72, "theme": { "spacing": "regular" } },
+        { "value": 36, "theme": { "spacing": "condensed" } }
+      ]
+    },
+    "radius.pill": { "type": "number", "value": 9999 }
+  },
+  "children": [
+    {
+      "id": "round-button",
+      "type": "frame",
+      "name": "Round button",
+      "reusable": true,
+      "x": 0,
+      "y": 0,
+      "cornerRadius": "$radius.pill",
+      "fill": "#2563EB",
+      "padding": [10, 24],
+      "children": [
+        { "id": "label", "type": "text", "content": "Submit", "fill": "#FFFFFF", "fontFamily": "Inter", "fontSize": 16, "fontWeight": "600" }
+      ]
+    },
+    {
+      "id": "red-round-button",
+      "type": "ref",
+      "ref": "round-button",
+      "x": 0,
+      "y": 80,
+      "fill": "#FF0000",
+      "descendants": { "label": { "content": "Cancel", "fill": "#FFFFFF" } }
+    },
+    {
+      "id": "alert",
+      "type": "frame",
+      "name": "Alert",
+      "reusable": true,
+      "x": 300,
+      "y": 0,
+      "layout": "vertical",
+      "gap": 12,
+      "padding": 16,
+      "fill": "#F4F4F5",
+      "cornerRadius": 12,
+      "children": [
+        { "id": "message", "type": "text", "content": "This is an alert!", "fill": "#000000", "fontSize": 14 },
+        { "id": "ok-button", "type": "ref", "ref": "round-button", "descendants": { "label": { "content": "OK" } } },
+        { "id": "cancel-button", "type": "ref", "ref": "round-button", "descendants": { "label": { "content": "Cancel" } } }
+      ]
+    },
+    {
+      "id": "save-alert",
+      "type": "ref",
+      "ref": "alert",
+      "x": 300,
+      "y": 220,
+      "descendants": {
+        "message": { "content": "You have unsaved changes. Do you want to save them?" },
+        "ok-button/label": { "content": "Save" },
+        "cancel-button/label": { "content": "Discard Changes", "fill": "#FF0000" }
+      }
+    },
+    {
+      "id": "icon-button",
+      "type": "ref",
+      "ref": "round-button",
+      "reusable": true,
+      "x": 0,
+      "y": 160,
+      "descendants": {
+        "label": { "id": "icon", "type": "icon", "library": "lucide", "icon": "check", "width": 24, "height": 24, "fill": "#FFFFFF" }
+      }
+    },
+    {
+      "id": "sidebar",
+      "type": "frame",
+      "name": "Sidebar",
+      "reusable": true,
+      "x": 700,
+      "y": 0,
+      "layout": "vertical",
+      "width": 200,
+      "children": [
+        { "id": "header", "type": "frame", "width": "fill_container", "height": 40, "fill": "#FF0000" },
+        { "id": "content", "type": "frame", "layout": "vertical", "width": "fill_container", "height": 120, "fill": "#00FF00", "slot": ["round-button", "icon-button"] },
+        { "id": "footer", "type": "frame", "width": "fill_container", "height": 40, "fill": "#0000FF" }
+      ]
+    },
+    {
+      "id": "menu-sidebar",
+      "type": "ref",
+      "ref": "sidebar",
+      "x": 700,
+      "y": 300,
+      "descendants": {
+        "content": {
+          "children": [
+            { "id": "home-button", "type": "ref", "ref": "round-button", "descendants": { "label": { "content": "Home" } } },
+            { "id": "settings-button", "type": "ref", "ref": "round-button", "descendants": { "label": { "content": "Settings" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": "landing-page-light",
+      "type": "frame",
+      "x": 0,
+      "y": 600,
+      "width": 480,
+      "height": 200,
+      "layout": "vertical",
+      "padding": 24,
+      "fill": "$color.background",
+      "children": [{ "id": "welcome-label", "type": "text", "fill": "$color.text", "fontSize": "$text.title", "content": "Welcome!" }]
+    },
+    {
+      "id": "landing-page-dark",
+      "type": "frame",
+      "x": 520,
+      "y": 600,
+      "width": 480,
+      "height": 200,
+      "layout": "vertical",
+      "padding": 24,
+      "theme": { "mode": "dark" },
+      "fill": "$color.background",
+      "children": [{ "id": "welcome-label-dark", "type": "text", "fill": "$color.text", "fontSize": "$text.title", "content": "Welcome!" }]
+    },
+    {
+      "id": "landing-page-dark-condensed",
+      "type": "frame",
+      "x": 1040,
+      "y": 600,
+      "width": 480,
+      "height": 200,
+      "layout": "vertical",
+      "padding": 24,
+      "fill": "$color.background",
+      "theme": { "mode": "dark", "spacing": "condensed" },
+      "children": [{ "id": "welcome-label-condensed", "type": "text", "fill": "$color.text", "fontSize": "$text.title", "content": "Welcome!" }]
+    }
+  ]
+}

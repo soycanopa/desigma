@@ -607,6 +607,11 @@ fn cut(app: &mut App) {
 
 // ------------------------------------------------------------------ IME
 fn preedit(app: &mut App, text: &str) {
+    // Linux input methods (IBus, fcitx) send an empty preedit on focus and selection changes;
+    // with no composition running it must not delete the selection (#19, #20).
+    if text.is_empty() && app.canvas.text.as_ref().is_none_or(|s| s.preedit.is_none()) {
+        return;
+    }
     let old = app.canvas.text.as_mut().and_then(|s| s.preedit.take());
     let sel_start = app.canvas.text.as_ref().map(|s| s.range().start).unwrap_or(0);
     let mut new_range = None;

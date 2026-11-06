@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 const T: Duration = Duration::from_secs(20);
 
 fn host_with(f: impl FnOnce(&mut HostOptions)) -> (Host, Ticket) {
-    let mut o = HostOptions { network: Network::Direct, ..Default::default() };
+    let mut o = HostOptions { network: Network::Loopback, ..Default::default() };
     f(&mut o);
     let host = Host::start(o).unwrap();
     let ticket = host.wait_ticket(T).expect("host bound");
@@ -13,7 +13,7 @@ fn host_with(f: impl FnOnce(&mut HostOptions)) -> (Host, Ticket) {
 }
 
 fn gopts() -> GuestOptions {
-    GuestOptions { network: Network::Direct, ..Default::default() }
+    GuestOptions { network: Network::Loopback, ..Default::default() }
 }
 
 fn join(ticket: &Ticket, name: &str, pw: Option<&str>) -> Result<(Guest, u32), JoinError> {

@@ -13,6 +13,7 @@ use desigma_render::{font_generation, outline_of, stroke_outline, stroke_plan, t
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /// The fields of a node that determine its geometry.
@@ -127,8 +128,12 @@ pub struct TextGeom {
 
 type StrokeMesh = Option<(Arc<Mesh>, StrokeClip)>;
 
+static NEXT_GEOM_ID: AtomicU64 = AtomicU64::new(1);
+
 /// Cached geometry of one node at one zoom bucket.
 pub struct NodeGeom {
+    /// Unique per build: equal ids mean identical meshes (cache keys of rendered results).
+    pub id: u64,
     pub shape: Option<NodeShape>,
     /// Fill mesh of `shape.paths`.
     pub fill: Option<Arc<Mesh>>,
@@ -310,7 +315,8 @@ impl GeomCache {
 
 fn build_geom(doc: &Document, n: &Node, scale: f32) -> NodeGeom {
     let tol = 0.1 / scale;
-    let mut g = NodeGeom { shape: None, fill: None, stroke: RefCell::default(), text: Vec::new(), scale, lazy: RefCell::default() };
+    let id = NEXT_GEOM_ID.fetch_add(1, Ordering::Relaxed);
+    let mut g = NodeGeom { id, shape: None, fill: None, stroke: RefCell::default(), text: Vec::new(), scale, lazy: RefCell::default() };
     if let NodeKind::Text(tp) = &n.kind {
         for o in text_outlines(tp, n.size) {
             let Some(mesh) = tessellate(&[(o.path.clone(), sk::FillRule::Winding)], tol) else { continue };

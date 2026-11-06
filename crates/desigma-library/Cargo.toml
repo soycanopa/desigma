@@ -9,6 +9,7 @@ license.workspace = true
 desigma-doc.workspace = true
 desigma-fig.workspace = true
 desigma-svg.workspace = true
+desigma-pen.workspace = true
 dirs = "5"
 serde.workspace = true
 serde_json.workspace = true

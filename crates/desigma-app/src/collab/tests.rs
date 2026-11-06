@@ -481,7 +481,7 @@ fn id_ranges_survive_everything_the_app_does_to_a_document() {
 
 #[test]
 fn over_real_network() {
-    std::env::set_var("DESIGMA_COLLAB_NETWORK", "direct");
+    std::env::set_var("DESIGMA_COLLAB_NETWORK", "loopback");
     let ctx = egui::Context::default();
     let (d, a, _) = doc();
     let mut host = App::new(d);
@@ -1036,7 +1036,7 @@ impl HostLink for SharedHost {
 
 #[test]
 fn over_real_network_a_severed_guest_comes_back_with_its_edits() {
-    std::env::set_var("DESIGMA_COLLAB_NETWORK", "direct");
+    std::env::set_var("DESIGMA_COLLAB_NETWORK", "loopback");
     let ctx = egui::Context::default();
     let (d, a, b) = doc();
     let mut host = App::new(d);

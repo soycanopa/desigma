@@ -168,18 +168,18 @@ impl<'a> Reader<'a> {
     pub fn var_u64(&mut self) -> Result<u64> {
         let mut v: u64 = 0;
         let mut shift = 0u32;
+        // kiwi's 64-bit varint: up to eight 7-bit groups, then a ninth byte
+        // that carries a full 8 bits (no continuation flag).
         loop {
             let b = self.byte()?;
-            if shift < 64 {
-                v |= ((b & 0x7f) as u64) << shift;
+            if shift == 56 {
+                return Ok(v | ((b as u64) << 56));
             }
+            v |= ((b & 0x7f) as u64) << shift;
             if b & 0x80 == 0 {
                 return Ok(v);
             }
             shift += 7;
-            if shift > 70 {
-                return Err(KiwiError::Bad("varint too long".into()));
-            }
         }
     }
     pub fn var_u32(&mut self) -> Result<u32> {
@@ -458,15 +458,15 @@ impl Writer {
         self.buf.push(b);
     }
     pub fn var_u64(&mut self, mut v: u64) {
-        loop {
-            let b = (v & 0x7f) as u8;
-            v >>= 7;
-            if v == 0 {
-                self.buf.push(b);
-                return;
+        // Mirrors `Reader::var_u64`: the ninth byte, if reached, holds the top 8 bits.
+        for _ in 0..8 {
+            if v < 0x80 {
+                break;
             }
-            self.buf.push(b | 0x80);
+            self.buf.push((v & 0x7f) as u8 | 0x80);
+            v >>= 7;
         }
+        self.buf.push(v as u8);
     }
     pub fn var_i64(&mut self, v: i64) {
         self.var_u64(((v << 1) ^ (v >> 63)) as u64);
@@ -591,6 +591,29 @@ mod tests {
         for v in [0i64, 1, -1, 63, -64, 64, 1 << 31, i32::MIN as i64, i64::MAX, i64::MIN] {
             assert_eq!(r.var_i64().unwrap(), v);
         }
+    }
+
+    #[test]
+    fn varint64_ninth_byte_is_full() {
+        // kiwi encodes u64::MAX as nine 0xff bytes; a LEB128 decoder would read a tenth.
+        let mut w = Writer::default();
+        w.var_u64(u64::MAX);
+        w.var_u64(5);
+        assert_eq!(w.buf, [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 5]);
+        let mut r = Reader::new(&w.buf);
+        assert_eq!(r.var_u64().unwrap(), u64::MAX);
+        assert_eq!(r.var_u64().unwrap(), 5);
+        assert!(r.at_end());
+
+        // A random seed with the high bit set (Figma's `strokeSeed`), followed by another value.
+        let seed = 15_639_266_553_043_455_682u64;
+        let mut w = Writer::default();
+        w.var_u64(seed);
+        w.var_u64(48);
+        assert_eq!(w.buf.len(), 10);
+        let mut r = Reader::new(&w.buf);
+        assert_eq!(r.var_u64().unwrap(), seed);
+        assert_eq!(r.var_u64().unwrap(), 48);
     }
 
     #[test]

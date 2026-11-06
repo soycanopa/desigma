@@ -16,6 +16,24 @@ use std::sync::Arc;
 const HOIST_AREA: i64 = 384 * 384;
 /// Blurs are done at reduced resolution above this sigma.
 const MAX_DIRECT_SIGMA: f32 = 16.0;
+/// Bytes of program results kept for reuse in later frames (see [`Program::cache`]).
+const RESULT_CACHE_BYTES: u64 = 256 << 20;
+/// Frames a cached program result survives without being used.
+const RESULT_CACHE_IDLE: u64 = 300;
+
+struct CachedResult {
+    _tex: wgpu::Texture,
+    view: wgpu::TextureView,
+    w: u32,
+    h: u32,
+    last_used: u64,
+}
+
+impl CachedResult {
+    fn bytes(&self) -> u64 {
+        self.w as u64 * self.h as u64 * 4
+    }
+}
 
 /// Counters of the last executed frame.
 #[derive(Clone, Copy, Debug, Default)]
@@ -27,6 +45,8 @@ pub struct ExecStats {
     pub programs_run: u32,
     pub meshes_uploaded: u32,
     pub pool_bytes: u64,
+    /// Programs whose result was taken from an earlier frame.
+    pub results_reused: u32,
 }
 
 /// The rendered page.
@@ -53,6 +73,7 @@ pub struct Renderer {
     noclip_bg: wgpu::BindGroup,
     arena: Arena,
     images: HashMap<u64, ImageTex>,
+    results: HashMap<u64, CachedResult>,
     ms_pool: Pool,
     plain_pool: Pool,
     ring: Ring,
@@ -154,6 +175,7 @@ impl Renderer {
             noclip_bg,
             arena: Arena::default(),
             images: HashMap::new(),
+            results: HashMap::new(),
             ms_pool: Pool::new(true),
             plain_pool: Pool::new(false),
             ring: Ring::default(),
@@ -252,6 +274,7 @@ impl Renderer {
             run.downsample_root(enc);
         }
         let st = run.stats;
+        self.ring.flush(&self.queue);
         self.stats = st;
         self.stats.pool_bytes = self.ms_pool.bytes() + self.plain_pool.bytes();
         self.stats.meshes_uploaded = std::mem::take(&mut self.arena.uploaded);
@@ -259,7 +282,27 @@ impl Renderer {
         self.plain_pool.trim(self.frame_no, 90);
         let fno = self.frame_no;
         self.images.retain(|_, i| fno.saturating_sub(i.last_used) < 900);
+        self.trim_results();
         output
+    }
+
+    /// Drops idle cached results, then the least recently used ones above the byte budget.
+    fn trim_results(&mut self) {
+        let fno = self.frame_no;
+        self.results.retain(|_, r| fno.saturating_sub(r.last_used) < RESULT_CACHE_IDLE);
+        let mut total: u64 = self.results.values().map(CachedResult::bytes).sum();
+        if total <= RESULT_CACHE_BYTES {
+            return;
+        }
+        let mut by_age: Vec<(u64, u64, u64)> = self.results.iter().map(|(k, r)| (r.last_used, r.bytes(), *k)).collect();
+        by_age.sort_unstable();
+        for (_, bytes, key) in by_age {
+            if total <= RESULT_CACHE_BYTES {
+                break;
+            }
+            self.results.remove(&key);
+            total -= bytes;
+        }
     }
 
     /// Renders `frame` and reads the result back as premultiplied RGBA8 rows.
@@ -531,7 +574,6 @@ impl<'a> FrameRun<'a> {
         let Some(src) = self.res[root].as_ref().and_then(|r| r.lease.clone()) else { return };
         let ub = self.r.ring.alloc(
             &self.r.dev,
-            &self.r.queue,
             &BlitParams {
                 src_extent: [self.frame.size.0 as f32, self.frame.size.1 as f32],
                 dst_extent: [self.frame.out_size.0 as f32, self.frame.out_size.1 as f32],
@@ -580,6 +622,16 @@ impl<'a> FrameRun<'a> {
         }
         if let Some(px) = &prog.pixels {
             self.upload_pixels(id, prog, px);
+            self.done[id as usize] = true;
+            self.finish_deps(id);
+            return;
+        }
+        let (pw, ph) = (prog.rect.w() as u32, prog.rect.h() as u32);
+        if let Some(hit) = prog.cache.and_then(|k| self.r.results.get_mut(&k)).filter(|c| (c.w, c.h) == (pw, ph)) {
+            hit.last_used = self.r.frame_no;
+            self.stats.results_reused += 1;
+            // no lease: the cached texture is never handed back to a pool
+            self.res[id as usize] = Some(Res { lease: None, view: hit.view.clone(), rect: prog.rect });
             self.done[id as usize] = true;
             self.finish_deps(id);
             return;
@@ -672,7 +724,7 @@ impl<'a> FrameRun<'a> {
                         out_h: h as f32,
                         pad: [0.0; 3],
                     };
-                    let ub = self.r.ring.alloc(&self.r.dev, &self.r.queue, &params);
+                    let ub = self.r.ring.alloc(&self.r.dev, &params);
                     let bg = uniform_bg(
                         &self.r.dev,
                         &self.r.layouts.fx,
@@ -690,6 +742,9 @@ impl<'a> FrameRun<'a> {
                     lease = Some(dst);
                 }
             }
+        }
+        if let (Some(key), Some(l)) = (prog.cache, &lease) {
+            self.store_result(enc, key, l, w, h);
         }
         if let Some(l) = &lease {
             self.res[id as usize] = Some(Res { lease: Some(l.clone()), view, rect: prog.rect });
@@ -713,6 +768,30 @@ impl<'a> FrameRun<'a> {
                 }
             }
         }
+    }
+
+    /// Keeps a copy of a finished program result for later frames.
+    fn store_result(&mut self, enc: &mut wgpu::CommandEncoder, key: u64, src: &Lease, w: u32, h: u32) {
+        if w == 0 || h == 0 || w as u64 * h as u64 * 4 > RESULT_CACHE_BYTES / 8 {
+            return;
+        }
+        let tex = self.r.dev.create_texture(&wgpu::TextureDescriptor {
+            label: Some("cached result"),
+            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        enc.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo { texture: &src.tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::TexelCopyTextureInfo { texture: &tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+        );
+        let view = tex.create_view(&Default::default());
+        self.r.results.insert(key, CachedResult { _tex: tex, view, w, h, last_used: self.r.frame_no });
     }
 
     fn upload_pixels(&mut self, id: ProgId, prog: &Program, px: &PixelData) {
@@ -809,7 +888,7 @@ impl<'a> FrameRun<'a> {
     }
 
     fn globals_for(&mut self, g: Globals) -> wgpu::BindGroup {
-        let ub = self.r.ring.alloc(&self.r.dev, &self.r.queue, &g);
+        let ub = self.r.ring.alloc(&self.r.dev, &g);
         uniform_bg(
             &self.r.dev,
             &self.r.layouts.globals,
@@ -836,7 +915,7 @@ impl<'a> FrameRun<'a> {
                     enabled: 1.0,
                     pad: [0.0; 3],
                 };
-                let ub = self.r.ring.alloc(&self.r.dev, &self.r.queue, &cp);
+                let ub = self.r.ring.alloc(&self.r.dev, &cp);
                 uniform_bg(
                     &self.r.dev,
                     &self.r.layouts.clip,
@@ -847,7 +926,7 @@ impl<'a> FrameRun<'a> {
             // the mask never rendered (empty): everything it clips is invisible
             None => {
                 let cp = ClipParams { origin: [0.0; 2], size: [0.0; 2], enabled: 1.0, pad: [0.0; 3] };
-                let ub = self.r.ring.alloc(&self.r.dev, &self.r.queue, &cp);
+                let ub = self.r.ring.alloc(&self.r.dev, &cp);
                 uniform_bg(
                     &self.r.dev,
                     &self.r.layouts.clip,
@@ -1000,7 +1079,7 @@ impl<'a> FrameRun<'a> {
 
     /// Records one composite quad into an open pass (`ms`: multisampled target).
     fn write_composite(&mut self, pass: &mut wgpu::RenderPass<'_>, target: IRect, spec: &CompSpec, ms: bool) {
-        let ub = self.r.ring.alloc(&self.r.dev, &self.r.queue, &spec.params);
+        let ub = self.r.ring.alloc(&self.r.dev, &spec.params);
         let bg = uniform_bg(
             &self.r.dev,
             &self.r.layouts.comp,
@@ -1222,7 +1301,7 @@ impl<'a> FrameRun<'a> {
                     out_h: sc.h() as f32,
                     pad: [0.0; 3],
                 };
-                let ub = self.r.ring.alloc(&self.r.dev, &self.r.queue, &params);
+                let ub = self.r.ring.alloc(&self.r.dev, &params);
                 let bgf = uniform_bg(
                     &self.r.dev,
                     &self.r.layouts.fx,
@@ -1290,7 +1369,6 @@ impl<'a> FrameRun<'a> {
         let dst = self.r.plain_pool.acquire(&self.r.dev, dst_extent.0, dst_extent.1, self.r.frame_no);
         let ub = self.r.ring.alloc(
             &self.r.dev,
-            &self.r.queue,
             &BlitParams {
                 src_extent: [src_extent.0 as f32, src_extent.1 as f32],
                 dst_extent: [dst_extent.0 as f32, dst_extent.1 as f32],
@@ -1315,11 +1393,8 @@ impl<'a> FrameRun<'a> {
     fn blur_pass(&mut self, enc: &mut wgpu::CommandEncoder, src: &Lease, extent: (u32, u32), sigma: f32, dir: [i32; 2], clamp: bool) -> Lease {
         let dst = self.r.plain_pool.acquire(&self.r.dev, extent.0, extent.1, self.r.frame_no);
         let radius = (3.0 * sigma).ceil().max(1.0) as i32;
-        let ub = self.r.ring.alloc(
-            &self.r.dev,
-            &self.r.queue,
-            &BlurParams { dir, size: [extent.0 as i32, extent.1 as i32], radius, clamp_edges: clamp as u32, sigma, pad: 0.0 },
-        );
+        let ub =
+            self.r.ring.alloc(&self.r.dev, &BlurParams { dir, size: [extent.0 as i32, extent.1 as i32], radius, clamp_edges: clamp as u32, sigma, pad: 0.0 });
         let bg =
             uniform_bg(&self.r.dev, &self.r.layouts.blur, &ub, &[wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&src.view) }]);
         let pipe = self.r.pipes.blur.clone();

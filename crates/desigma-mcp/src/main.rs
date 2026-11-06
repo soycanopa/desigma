@@ -1,7 +1,15 @@
+// Claude launches this process with its own stdin and stdout. A console subsystem would open a
+// command window on Windows; a windowed process keeps those pipes and shows nothing.
+#![cfg_attr(all(windows, not(debug_assertions), not(test)), windows_subsystem = "windows")]
+
 use desigma_mcp::server::DesigmaServer;
 use rmcp::{transport::stdio, ServiceExt};
 
-#[tokio::main]
+// rmcp spawns one task per request. On a single-threaded runtime those tasks run in the
+// order the requests arrived, and each tool call holds the session for its whole (synchronous)
+// run, so calls execute and answer strictly in order (#31): a create followed by a read in the
+// same burst sees the created layer. The session is one document, so nothing is lost.
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let root = match (args.next(), args.next(), args.next()) {

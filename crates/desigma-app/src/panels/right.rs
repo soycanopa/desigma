@@ -56,19 +56,21 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
     if app.motion.enabled {
         // Motion mode: a "Motion  Beta" title replaces the Design / Prototype tabs.
         let font = theme::font_body_strong();
-        let tw = widgets::text_width(&p, "Motion", &font);
-        p.text(Pos2::new(x + theme::RIGHT_TAB_PAD_X, ty + theme::RIGHT_TABS_H / 2.0), Align2::LEFT_CENTER, "Motion", font, theme::TEXT);
+        let motion = crate::i18n::tr("Motion");
+        let tw = widgets::text_width(&p, motion, &font);
+        p.text(Pos2::new(x + theme::RIGHT_TAB_PAD_X, ty + theme::RIGHT_TABS_H / 2.0), Align2::LEFT_CENTER, motion, font, theme::TEXT);
         let pill = Rect::from_min_size(Pos2::new(x + theme::RIGHT_TAB_PAD_X + tw + 6.0, ty + 5.0), Vec2::new(30.0, 14.0));
         p.rect_filled(pill, theme::cr(7), theme::BG_SECONDARY);
-        p.text(pill.center(), Align2::CENTER_CENTER, "Beta", theme::font_small_medium(), theme::TEXT_SECONDARY);
+        p.text(pill.center(), Align2::CENTER_CENTER, crate::i18n::tr("Beta"), theme::font_small_medium(), theme::TEXT_SECONDARY);
         crate::widgets::record(ui, "motion-beta-pill", pill);
     }
-    for &(tab, label) in tabs {
+    for &(tab, key) in tabs {
+        let label = crate::i18n::tr(key);
         let sel = tab == active;
         let font = if sel { theme::font_body_strong() } else { theme::font_body() };
         let w = widgets::text_width(&p, label, &font) + theme::RIGHT_TAB_PAD_X * 2.0;
         let r = Rect::from_min_size(Pos2::new(x, ty), Vec2::new(w, theme::RIGHT_TABS_H));
-        let resp = ui.interact(r, ui.id().with(("tab", label)), Sense::click());
+        let resp = ui.interact(r, ui.id().with(("tab", key)), Sense::click());
         if sel {
             p.rect_filled(r, theme::cr(theme::RADIUS_MEDIUM), theme::BG_SECONDARY);
         } else if resp.hovered() {

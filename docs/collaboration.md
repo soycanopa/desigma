@@ -317,7 +317,7 @@ notes in its README).
   system, so every `Fonts` request is answered with empty bytes ("cannot share").
 * **Authority and persistence.** It applies guests' ops to its own document, autosaves when changed (default
   10 s) and on Ctrl-C / `SIGTERM`, always temp file plus rename, with rotating `FILE.bak.N` backups.
-  `.fig` / REST `.json` / `.svg` inputs are imported once and saved as `.desigma` next to the source.
+  `.fig` / `.pen` / REST `.json` / `.svg` inputs are imported once and saved as `.desigma` next to the source.
 * **Stable link.** `HostOptions` gained `secret_key` (fixed endpoint identity) and `port`; the server keeps the
   key in `.<name>.desigma-key` (mode 0600 on Unix). `Ticket::relay_only` drops direct addresses so the link
   does not change when the IP does.

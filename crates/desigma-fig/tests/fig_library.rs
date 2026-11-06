@@ -234,6 +234,11 @@ fn nested_library_instances_expand_and_overrides_follow_override_keys() {
     let glyph = child(&doc, icon, "Glyph");
     assert_eq!(solid_of(glyph), Color { r: 0.0, g: 0.0, b: 1.0, a: 1.0 });
     assert!(glyph.component.source.is_some());
+    // Copies are addressed by the library-side ids (override keys), as in REST:
+    // `I<instance>;<icon slot>;<glyph>`, not the local copy's guids (5:5, 5:2).
+    assert_eq!(label.source_id.as_deref(), Some("I1:1;9:4"));
+    assert_eq!(icon.source_id.as_deref(), Some("I1:1;9:5"));
+    assert_eq!(glyph.source_id.as_deref(), Some("I1:1;9:5;9:2"));
     // The component property hid the nested icon.
     assert!(!icon.visible);
 

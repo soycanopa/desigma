@@ -9,6 +9,10 @@ use desigma_fonts::{ensure_fonts_with, FontCache, FontReport, FontRequest};
 use std::collections::HashSet;
 use std::sync::mpsc::{channel, Receiver};
 
+fn installed_exactly(family: &str) -> bool {
+    desigma_render::resolve_font(family, 400, false).is_some_and(|f| f.family.eq_ignore_ascii_case(family))
+}
+
 #[derive(Default)]
 pub struct FontLoader {
     pending: Option<Receiver<FontReport>>,
@@ -25,7 +29,7 @@ pub struct FontsLoaded {
 impl FontLoader {
     /// Starts resolving the document's fonts; a previous load is abandoned.
     pub fn load_for(&mut self, doc: &Document) {
-        // Fonts the text names, plus the Noto fallbacks of the complex scripts it uses (Arabic, Hebrew, Devanagari).
+        // Fonts the text names, plus the Noto fallbacks of the complex scripts it uses (Arabic, Hebrew, Devanagari, CJK).
         let mut requests = desigma_fonts::requests_for(doc);
         requests.extend(desigma_fonts::script_requests_for(doc));
         if requests.is_empty() {
@@ -37,9 +41,14 @@ impl FontLoader {
         let installed: HashSet<String> = requests
             .iter()
             .map(|r| r.family.clone())
-            .filter(|family| desigma_render::resolve_font(family, 400, false).is_some_and(|f| f.family.eq_ignore_ascii_case(family)))
+            .filter(|family| {
+                // A script fallback is not needed when the system has a font that covers the
+                // script (e.g. Microsoft YaHei for Chinese), so offline users see no failure.
+                let alternatives = desigma_fonts::Script::of_family(family).map(|s| s.system_alternatives()).unwrap_or_default();
+                std::iter::once(family.as_str()).chain(alternatives.iter().copied()).any(installed_exactly)
+            })
             .collect();
-        let doc = doc.clone();
+        let doc = doc.clone_without_images();
         let (tx, rx) = channel();
         std::thread::spawn(move || {
             let report = ensure_fonts_with(&doc, &FontCache::new(), |family| installed.contains(family));

@@ -223,9 +223,12 @@ impl Pool {
 const RING_CHUNK: u64 = 1 << 20;
 const SLOT: u64 = 256;
 
+/// Uniform slots of one frame. Values are staged on the CPU and uploaded with one
+/// `write_buffer` per chunk in [`Ring::flush`]: a queue write per slot costs a staging
+/// buffer each, which made frames with thousands of passes take seconds to encode.
 #[derive(Default)]
 pub struct Ring {
-    chunks: Vec<wgpu::Buffer>,
+    chunks: Vec<(wgpu::Buffer, Vec<u8>)>,
     cur: usize,
     off: u64,
 }
@@ -234,10 +237,14 @@ impl Ring {
     pub fn reset(&mut self) {
         self.cur = 0;
         self.off = 0;
+        for (_, staged) in &mut self.chunks {
+            staged.clear();
+        }
     }
 
     /// Writes `v` into a fresh 256-byte slot; returns the buffer, offset and size.
-    pub fn alloc<T: bytemuck::Pod>(&mut self, dev: &wgpu::Device, queue: &wgpu::Queue, v: &T) -> (wgpu::Buffer, u64, u64) {
+    /// The data reaches the GPU at the next [`Ring::flush`], which must precede the submit.
+    pub fn alloc<T: bytemuck::Pod>(&mut self, dev: &wgpu::Device, v: &T) -> (wgpu::Buffer, u64, u64) {
         let size = std::mem::size_of::<T>() as u64;
         if self.chunks.is_empty() || self.off + SLOT > RING_CHUNK {
             if !self.chunks.is_empty() {
@@ -245,19 +252,30 @@ impl Ring {
             }
             self.off = 0;
             if self.cur >= self.chunks.len() {
-                self.chunks.push(dev.create_buffer(&wgpu::BufferDescriptor {
+                let buf = dev.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("uniform ring"),
                     size: RING_CHUNK,
                     usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                     mapped_at_creation: false,
-                }));
+                });
+                self.chunks.push((buf, Vec::with_capacity(RING_CHUNK as usize)));
             }
         }
-        let buf = self.chunks[self.cur].clone();
         let off = self.off;
-        queue.write_buffer(&buf, off, bytemuck::bytes_of(v));
+        let (buf, staged) = &mut self.chunks[self.cur];
+        staged.resize(off as usize, 0);
+        staged.extend_from_slice(bytemuck::bytes_of(v));
         self.off += SLOT;
-        (buf, off, size)
+        (buf.clone(), off, size)
+    }
+
+    /// Uploads every slot written since [`Ring::reset`].
+    pub fn flush(&mut self, queue: &wgpu::Queue) {
+        for (buf, staged) in &self.chunks {
+            if !staged.is_empty() {
+                queue.write_buffer(buf, 0, staged);
+            }
+        }
     }
 }
 
@@ -348,7 +366,6 @@ impl ImageUpload<'_> {
             let dst = level(m);
             let ub = self.ring.alloc(
                 self.dev,
-                self.queue,
                 &BlitParams { src_extent: [sw as f32, sh as f32], dst_extent: [dw as f32, dh as f32], src_tex: [sw as f32, sh as f32], pad: [0.0; 2] },
             );
             let bg = uniform_bg(

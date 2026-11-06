@@ -2,7 +2,7 @@
 
 use crate::effects::effects_of;
 use crate::paint::{self, affine, Frame};
-use crate::scan::{Shape, GENERATED_ID};
+use crate::scan::{Shape, GENERATED_ID, KEPT_GROUP_ID};
 use crate::SvgNodes;
 use desigma_doc::*;
 use std::collections::{BTreeMap, HashMap};
@@ -194,7 +194,7 @@ impl Conv<'_> {
             }
             // An unnamed, untransformed, plain group (what `export_svg` writes per
             // layer wrapper) adds nothing: its children join the parent.
-            if m.plain() && layer_name(g.id()).is_none() && local == Affine::IDENTITY {
+            if m.plain() && layer_name(g.id()).is_none() && !g.id().starts_with(KEPT_GROUP_ID) && local == Affine::IDENTITY {
                 return self.convert_list(kids, parent, &Attrs::with_pre(m.pre));
             }
         }

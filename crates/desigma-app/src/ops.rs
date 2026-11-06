@@ -757,15 +757,11 @@ impl App {
     pub fn fit_all(&mut self) {
         let b = self.page_bounds().unwrap_or(Rect::new(0.0, 0.0, 800.0, 600.0));
         self.view = View::fit(b, self.canvas_rect.size());
-        self.changed();
     }
 
     pub fn fit_selection(&mut self) {
         match self.selection_bounds() {
-            Some(b) => {
-                self.view = View::fit(b, self.canvas_rect.size());
-                self.changed();
-            }
+            Some(b) => self.view = View::fit(b, self.canvas_rect.size()),
             None => self.fit_all(),
         }
     }
@@ -776,13 +772,11 @@ impl App {
         let z = zoom.clamp(theme::ZOOM_MIN, theme::ZOOM_MAX);
         let size = self.canvas_rect.size();
         self.view = View { zoom: z, offset: Vec2::new(b.x + b.w / 2.0 - size.x / 2.0 / z, b.y + b.h / 2.0 - size.y / 2.0 / z) };
-        self.changed();
     }
 
     pub fn zoom_to(&mut self, zoom: f32) {
         let c = self.canvas_rect.center();
         self.view.zoom_at(self.canvas_rect.min, c, zoom);
-        self.changed();
     }
 
     pub fn zoom_by(&mut self, factor: f32) {
@@ -813,6 +807,11 @@ impl App {
         self.file_hash = Some(crate::home::session::doc_hash(&self.doc));
         if let Some(b) = &self.bridge.bridge {
             b.update_document(&self.doc.name, self.file_path.as_deref());
+        }
+        // Watch this file for edits made by other programs (generators, sync clients).
+        match self.file_path.clone() {
+            Some(p) => self.watch_external(&p),
+            None => self.stop_watching(),
         }
         self.canvas.reset_interaction();
         // a design tool means nothing on a board and the other way round
@@ -855,13 +854,22 @@ impl App {
         if !self.leave_ok(move |app| app.open_path(again)) {
             return;
         }
-        match io::load_path(&p) {
-            Ok(doc) => {
+        match io::load_path_noted(&p) {
+            Ok((doc, notes)) => {
                 let name = doc.name.clone();
+                let source = p.clone();
                 // An SVG becomes a new unsaved document, never overwritten by Save.
                 let svg = p.extension().is_some_and(|e| e.eq_ignore_ascii_case("svg"));
                 self.replace_document(doc, (!svg).then_some(p));
-                self.show_toast(format!("Opened {name}"), false);
+                match notes.split_first() {
+                    None => self.show_toast(format!("Opened {name}"), false),
+                    // What an import left out, so a missing script or icon is not a surprise.
+                    Some((first, rest)) => {
+                        let more = if rest.is_empty() { String::new() } else { format!(" (and {} more)", rest.len()) };
+                        self.show_toast(format!("Opened {name}. Not carried over: {first}{more}"), false);
+                    }
+                }
+                self.publish_shared_copy(&source);
             }
             Err(e) => self.show_toast(e, true),
         }
@@ -883,8 +891,10 @@ impl App {
             Ok(p) => {
                 self.show_toast(format!("Saved {}", p.display()), false);
                 if self.lib_file.is_none() {
-                    self.file_path = Some(p);
+                    self.file_path = Some(p.clone());
                     self.file_hash = Some(crate::home::session::doc_hash(&self.doc));
+                    self.watch_external(&p);
+                    self.publish_shared_copy(&p);
                 }
             }
             Err(e) => self.show_toast(e, true),

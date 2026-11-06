@@ -7,11 +7,42 @@ pub const NATIVE_EXT: &str = "desigma";
 
 /// Loads a document from disk, dispatching on the file extension.
 pub fn load_path(path: &Path) -> Result<Document, String> {
+    load_path_noted(path).map(|(doc, _)| doc)
+}
+
+/// [`load_path`], plus notes on what an import could not carry over (empty for every format
+/// but `.pen`).
+pub fn load_path_noted(path: &Path) -> Result<(Document, Vec<String>), String> {
+    let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    guard(&file, || load_unguarded(path))
+}
+
+/// Runs an import so that a bug in an importer reports an error instead of closing the app.
+/// The panic hook has already written the details to the crash log.
+fn guard<T>(file: &str, load: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(load)).unwrap_or_else(|payload| {
+        Err(format!(
+            "Cannot open {file}: desigma hit an internal error ({}). Details were saved to {}; please attach that file to a bug report.",
+            crate::crash::payload_message(payload.as_ref()),
+            crate::crash::log_path().display()
+        ))
+    })
+}
+
+fn load_unguarded(path: &Path) -> Result<(Document, Vec<String>), String> {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let mut notes = Vec::new();
     let mut doc = match ext.as_str() {
         "fig" => {
             let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
             desigma_fig::import_fig(&bytes).map_err(|e| format!("Cannot import .fig: {e}"))?
+        }
+        "pen" => {
+            let bytes = std::fs::read(path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
+            let opts = desigma_pen::Options { base_dir: path.parent().map(Path::to_path_buf), ..Default::default() };
+            let import = desigma_pen::import_with(&bytes, &opts).map_err(|e| format!("Cannot import .pen: {e}"))?;
+            notes = import.warnings;
+            import.document
         }
         "json" => {
             let text = std::fs::read_to_string(path).map_err(|e| format!("Cannot read {}: {e}", path.display()))?;
@@ -25,7 +56,8 @@ pub fn load_path(path: &Path) -> Result<Document, String> {
             let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("svg");
             let mut doc = Document::new(name);
             let page = doc.add_page("Page 1");
-            desigma_svg::import_svg_named(&text, name, &mut doc, page, Vec2::ZERO).map_err(|e| format!("Cannot import SVG: {e}"))?;
+            let opts = desigma_svg::ImportOptions { base_dir: path.parent().map(Path::to_path_buf) };
+            desigma_svg::import_svg_named_with(&text, name, &mut doc, page, Vec2::ZERO, &opts).map_err(|e| format!("Cannot import SVG: {e}"))?;
             doc
         }
         _ => {
@@ -37,7 +69,7 @@ pub fn load_path(path: &Path) -> Result<Document, String> {
         doc.name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled").to_string();
     }
     ensure_page(&mut doc);
-    Ok(doc)
+    Ok((doc, notes))
 }
 
 pub fn ensure_page(doc: &mut Document) {
@@ -60,8 +92,9 @@ pub fn save_path(doc: &Document, path: &Path) -> Result<PathBuf, String> {
 
 pub fn pick_open() -> Option<PathBuf> {
     rfd::FileDialog::new()
-        .add_filter("Design files", &["fig", "json", "desigma", "svg"])
+        .add_filter("Design files", &["fig", "pen", "json", "desigma", "svg"])
         .add_filter("Figma file", &["fig"])
+        .add_filter("Pencil file", &["pen"])
         .add_filter("SVG", &["svg"])
         .add_filter("JSON", &["json"])
         .add_filter("desigma", &[NATIVE_EXT])
@@ -133,6 +166,48 @@ mod tests {
         assert_eq!(page.name, "Page 1");
         assert_eq!(page.children.len(), 1);
         assert_eq!(d.get(page.children[0]).unwrap().name, d.name);
+    }
+
+    #[test]
+    fn pen_loads_with_notes_and_is_not_saved_back() {
+        let p = tmp("design.pen");
+        std::fs::write(
+            &p,
+            r##"{"version":"2.21","children":[{"id":"a","type":"frame","name":"Card","width":80,"height":40,"fill":"#FF0000","children":[{"id":"s","type":"script","width":10,"height":10}]}]}"##,
+        )
+        .unwrap();
+        let (d, notes) = load_path_noted(&p).unwrap();
+        std::fs::remove_file(&p).ok();
+        assert!(d.name.ends_with("design"));
+        let page = d.get(d.pages[0]).unwrap();
+        assert_eq!(page.children.len(), 1);
+        assert_eq!(d.get(page.children[0]).unwrap().name, "Card");
+        assert_eq!(notes.len(), 1);
+        assert!(notes[0].contains("script"));
+        let bad = tmp("bad.pen");
+        std::fs::write(&bad, [0u8, 1, 2]).unwrap();
+        assert!(load_path(&bad).unwrap_err().contains("Cannot import .pen"));
+        std::fs::remove_file(&bad).ok();
+    }
+
+    #[test]
+    fn macos_bundle_declares_the_native_document_type() {
+        // Finder opens a document only when its extension resolves to a declared UTI that the
+        // app lists in `LSItemContentTypes`; extensions alone leave a dyn.* type (#29).
+        let plist = include_str!("../../../packaging/macos/Info.plist.in");
+        let uti = "<string>ai.deepfounder.desigma.document</string>";
+        assert!(plist.contains("<key>UTExportedTypeDeclarations</key>"));
+        assert!(plist.matches(uti).count() >= 2, "exported and referenced by the document type");
+        assert!(plist.contains(&format!("<string>{NATIVE_EXT}</string>")));
+        assert!(plist.contains("<string>com.figma.document</string>") && plist.contains("<key>UTImportedTypeDeclarations</key>"));
+    }
+
+    #[test]
+    fn importer_panics_become_errors() {
+        let err = guard("broken.fig", || -> Result<(), String> { panic!("index out of bounds") }).unwrap_err();
+        assert!(err.starts_with("Cannot open broken.fig: desigma hit an internal error (index out of bounds)"));
+        assert!(err.contains("crash.log"));
+        assert_eq!(guard("ok.fig", || Ok::<_, String>(3)), Ok(3));
     }
 
     #[test]

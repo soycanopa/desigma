@@ -59,6 +59,36 @@ fn saved_file_roundtrip_and_unsaved_changes_guard() {
 }
 
 #[test]
+fn save_can_overwrite_the_file_it_opened_when_asked() {
+    let dir = Workspace::new();
+    let mut s = Session::with_discovery(&dir.0, None).unwrap();
+    let page = s.call("desigma_get_document", json!({})).unwrap()["pages"][0]["node_id"].clone();
+    s.call("desigma_create_node", json!({"parent_id":page,"kind":"text","name":"T","text":"one"})).unwrap();
+    s.call("desigma_save_file", json!({"path":"iter.desigma"})).unwrap();
+    s.call("desigma_open_file", json!({"path":"iter.desigma"})).unwrap();
+    let doc = s.call("desigma_get_document", json!({})).unwrap();
+    assert_eq!(doc["path"], "iter.desigma", "the session reports the file it came from: {doc}");
+    s.call("desigma_create_node", json!({"parent_id":page,"kind":"rectangle","name":"R"})).unwrap();
+    // without the flag the existing file is kept
+    assert!(s.call("desigma_save_file", json!({"path":"iter.desigma"})).unwrap_err().contains("overwrite=true"));
+    s.call("desigma_save_file", json!({"path":"iter.desigma","overwrite":true})).unwrap();
+    let saved = fs::read_to_string(dir.0.join("iter.desigma")).unwrap();
+    assert!(saved.contains("\"R\""), "the overwrite holds the new layer");
+    let leftovers: Vec<_> = fs::read_dir(&dir.0).unwrap().flatten().map(|e| e.file_name()).filter(|n| n.to_string_lossy().ends_with(".tmp")).collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+    // overwriting never follows a symlink out of the workspace
+    #[cfg(unix)]
+    {
+        let outside = Workspace::new();
+        let target = outside.0.join("victim.desigma");
+        fs::write(&target, "keep").unwrap();
+        std::os::unix::fs::symlink(&target, dir.0.join("link.desigma")).unwrap();
+        assert!(s.call("desigma_save_file", json!({"path":"link.desigma","overwrite":true})).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "keep");
+    }
+}
+
+#[test]
 fn paths_and_bad_imports_cannot_replace_the_session() {
     let dir = Workspace::new();
     let outside = Workspace::new();
@@ -273,4 +303,26 @@ fn file_session_switches_to_a_late_editor_only_without_unsaved_edits() {
     assert_eq!(dirty.call("desigma_get_document", json!({})).unwrap()["session"], "editor");
 
     let _ = fs::remove_file(&file);
+}
+
+#[test]
+fn list_files_shows_library_designs_and_outside_copies() {
+    let dir = Workspace::new();
+    let lib = desigma_library::Library::open(&dir.0).unwrap();
+    let project = lib.create_project("Inbox").unwrap();
+    let mut doc = desigma_doc::Document::new("Poster");
+    doc.add_page("Page 1");
+    lib.create_file(&project.id, None, "Poster", &doc).unwrap();
+    let shared = dir.0.join(desigma_library::SHARED_DIR);
+    fs::create_dir(&shared).unwrap();
+    fs::write(shared.join("From Downloads.desigma"), doc.to_json().unwrap()).unwrap();
+
+    let mut session = Session::with_discovery(&dir.0, None).unwrap();
+    let listed = session.call("desigma_list_files", json!({})).unwrap();
+    let files = listed["files"].as_array().unwrap();
+    assert!(files.iter().any(|f| f["name"] == "Poster" && f["project"] == "Inbox"), "{listed}");
+    let outside = files.iter().find(|f| f["name"] == "From Downloads").unwrap();
+    assert_eq!(outside["path"], "shared/From Downloads.desigma");
+    session.call("desigma_open_file", json!({"path": outside["path"]})).unwrap();
+    assert_eq!(session.call("desigma_get_document", json!({})).unwrap()["name"], "Poster");
 }

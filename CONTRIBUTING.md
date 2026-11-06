@@ -61,6 +61,7 @@ Use test documents and third-party assets whose licenses permit the intended use
 | `desigma-doc` | Scene graph, paints, text, auto layout, components, variables, prototype model, undo/redo. Pure data, no UI. |
 | `desigma-render` | Deterministic CPU renderer (tiny-skia), spatial index, tile cache. |
 | `desigma-fig` | Figma REST JSON and `.fig` import, REST JSON export. |
+| `desigma-pen` | Pencil `.pen` import. |
 | `desigma-fonts` | Bundled Inter, Fontsource fetch and cache, font substitution. |
 | `desigma-export` | PNG, JPG, SVG export and Dev mode CSS. |
 | `desigma-app` | The egui desktop editor (binary `desigma`). |

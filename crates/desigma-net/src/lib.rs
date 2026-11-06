@@ -30,8 +30,11 @@ pub enum Network {
     /// Default n0 relays and address discovery (hole punching with relay fallback).
     #[default]
     Internet,
-    /// No relay, no discovery: direct addresses only (LAN, loopback, tests).
+    /// No relay, no discovery: direct addresses only (LAN).
     Direct,
+    /// Like [`Network::Direct`], bound to 127.0.0.1 only: tests and same-machine sessions,
+    /// which then never trigger a firewall prompt.
+    Loopback,
 }
 
 /// Peer index: 0 is the host, guests get 1, 2, ... and are never reused within a session.

@@ -83,8 +83,8 @@ pub fn dialog(app: &mut App, ctx: &Context) {
         widgets::menu_panel(&p, rect, theme::MENU_RADIUS);
         let x0 = rect.left() + PAD;
         let y = rect.top() + PAD;
-        p.text(Pos2::new(x0, y + 12.0), Align2::LEFT_CENTER, "Discard unsaved changes?", theme::font_large_strong(), theme::TEXT);
-        let g = p.layout(body.into(), theme::font_body(), theme::TEXT_SECONDARY, W - PAD * 2.0);
+        p.text(Pos2::new(x0, y + 12.0), Align2::LEFT_CENTER, crate::i18n::tr("Discard unsaved changes?"), theme::font_large_strong(), theme::TEXT);
+        let g = p.layout(crate::i18n::tr(body).into(), theme::font_body(), theme::TEXT_SECONDARY, W - PAD * 2.0);
         p.galley(Pos2::new(x0, y + 36.0), g, theme::TEXT_SECONDARY);
         let by = rect.bottom() - PAD - 32.0;
         let mut right = rect.right() - PAD;

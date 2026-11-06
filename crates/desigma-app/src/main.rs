@@ -1,3 +1,7 @@
+// Release builds are a windowed app: double-clicking opens no command prompt. Debug builds stay
+// console programs. Tests keep the console too, so `cargo test --release` can still print.
+#![cfg_attr(all(windows, not(debug_assertions), not(test)), windows_subsystem = "windows")]
+
 mod app;
 mod board;
 mod bridge;
@@ -7,14 +11,17 @@ mod clipboard;
 mod collab;
 mod comments;
 mod comp_ops;
+mod crash;
 mod decks;
 mod demo;
 mod dev;
 mod edit;
+mod extwatch;
 mod find;
 mod fonts;
 mod history;
 mod home;
+mod i18n;
 mod icons;
 mod instance;
 mod io;
@@ -25,6 +32,7 @@ mod lint;
 mod loopback;
 #[cfg(target_os = "macos")]
 mod macos;
+mod mcp_link;
 mod motion;
 mod ops;
 mod panels;
@@ -75,7 +83,24 @@ fn window_icon() -> Option<egui::IconData> {
     Some(egui::IconData { rgba: img.into_raw(), width, height })
 }
 
+/// A windowed process has no console of its own. If it was started from a terminal, attach to
+/// that one so `--help`, `--version` and errors still print there. Rust reads the console handles
+/// on the first print, so this has to run before any output.
+#[cfg(all(windows, not(debug_assertions), not(test)))]
+fn attach_parent_console() {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn AttachConsole(process_id: u32) -> i32;
+    }
+    unsafe {
+        AttachConsole(u32::MAX);
+    }
+}
+
 fn main() {
+    crash::install();
+    #[cfg(all(windows, not(debug_assertions), not(test)))]
+    attach_parent_console();
     let opts = match cli::parse(std::env::args().skip(1)) {
         Ok(o) => o,
         Err(e) => {
@@ -89,6 +114,11 @@ fn main() {
     }
     if opts.version {
         println!("desigma {VERSION}");
+        return;
+    }
+    if opts.print_library_path {
+        let root = opts.library.clone().unwrap_or_else(desigma_library::Library::default_root);
+        println!("{}", root.display());
         return;
     }
     if let Some(file) = &opts.export_animation {
@@ -156,7 +186,9 @@ fn main() {
     // normally started when the window closed; this catches a close that skipped that frame
     updater::install::run_stashed();
     if screenshot_mode && !shell::SHOT_OK.load(Ordering::SeqCst) {
-        eprintln!("desigma: screenshot was not captured");
+        let why = shell::SHOT_ERR.lock().map(|e| e.clone()).unwrap_or_default();
+        let why = if why.is_empty() { "the window closed before a frame was captured".to_string() } else { why };
+        eprintln!("desigma: screenshot was not captured: {why}");
         std::process::exit(1);
     }
 }

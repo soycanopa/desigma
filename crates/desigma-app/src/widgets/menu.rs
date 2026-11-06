@@ -126,7 +126,7 @@ impl Layout {
         let mut need = 0.0f32;
         ctx.fonts_mut(|f| {
             for it in items {
-                let lw = f.layout_no_wrap(it.label.clone(), font.clone(), Color32::WHITE).size().x;
+                let lw = f.layout_no_wrap(crate::i18n::tr(&it.label).to_string(), font.clone(), Color32::WHITE).size().x;
                 let sw = if it.shortcut.is_empty() { 0.0 } else { f.layout_no_wrap(it.shortcut.clone(), font.clone(), Color32::WHITE).size().x };
                 let right = if it.has_sub() {
                     theme::MENU_LABEL_GAP + theme::MENU_CHEVRON_BOX + theme::MENU_CHEVRON_PAD
@@ -328,7 +328,7 @@ pub fn popup_tree(ctx: &egui::Context, id: Id, pos: Pos2, min_w: f32, items: &[M
                     let ix = if lay.has_check { theme::MENU_ICON_X_CHECKED } else { theme::MENU_ICON_X_PLAIN };
                     icons::paint(&p, ic, Pos2::new(rect.left() + ix + theme::MENU_ICON_BOX / 2.0, cy), theme::MENU_ICON_SIZE, col);
                 }
-                p.text(Pos2::new(rect.left() + label_x(it, lay.has_check), cy), Align2::LEFT_CENTER, &it.label, font.clone(), col);
+                p.text(Pos2::new(rect.left() + label_x(it, lay.has_check), cy), Align2::LEFT_CENTER, crate::i18n::tr(&it.label), font.clone(), col);
                 if it.has_sub() {
                     let c = if it.disabled {
                         theme::TEXT_DISABLED

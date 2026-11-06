@@ -15,7 +15,7 @@ On start it prints the join link (`desigma://join/...`) and, with `--link-file`,
 
 | Option | Meaning |
 |---|---|
-| `FILE` | A `.desigma` file (created empty if it does not exist), or a `.fig`, Figma REST `.json` or `.svg` to import. An import is saved next to it as `<name>.desigma`; from then on that file is the one served, so restarting with the same command keeps later edits. Delete it to import again. |
+| `FILE` | A `.desigma` file (created empty if it does not exist), or a `.fig`, `.pen`, Figma REST `.json` or `.svg` to import. An import is saved next to it as `<name>.desigma`; from then on that file is the one served, so restarting with the same command keeps later edits. Delete it to import again. |
 | `--password P`, `--password-env VAR` | Guests must give this password. Prefer the environment variable: command lines are visible in `ps`. |
 | `--view-only` | Guests can look, not edit. |
 | `--approve-none` | Accept everyone who knows the link and password. This is the default and the only mode: there is nobody to click Accept on a headless host. (So use a password.) |

@@ -1,0 +1,194 @@
+{
+  "version": "2.11",
+  "children": [
+    {
+      "type": "frame",
+      "id": "8mdue",
+      "x": -7548,
+      "y": -2561,
+      "name": "Selection",
+      "clip": true,
+      "width": 2371,
+      "height": 2367,
+      "fill": "#ffffffff",
+      "layout": "none",
+      "children": [
+        {
+          "type": "script",
+          "id": "RBtGp",
+          "x": 164,
+          "y": 627,
+          "name": "chart",
+          "clip": true,
+          "width": 660,
+          "height": 336,
+          "scriptUri": "chart.js"
+        },
+        {
+          "type": "script",
+          "id": "TLsj2",
+          "x": 1560,
+          "y": 646,
+          "name": "digital-spectrum",
+          "clip": true,
+          "width": 589,
+          "height": 336,
+          "scriptUri": "digital-spectrum.js"
+        },
+        {
+          "type": "script",
+          "id": "fRyTw",
+          "x": 1269,
+          "y": 89,
+          "name": "circle-text",
+          "clip": true,
+          "width": 407,
+          "height": 420,
+          "scriptUri": "circle-text.js",
+          "inputs": {
+            "showCircle": false,
+            "filled": false
+          }
+        },
+        {
+          "type": "script",
+          "id": "0CpXP",
+          "x": 164,
+          "y": 89,
+          "name": "lines",
+          "clip": true,
+          "width": 407,
+          "height": 420,
+          "scriptUri": "lines.js",
+          "inputs": {
+            "lines": 33
+          }
+        },
+        {
+          "type": "script",
+          "id": "3DrF9",
+          "x": 724,
+          "y": 89,
+          "name": "circular-visualizer",
+          "clip": true,
+          "width": 407,
+          "height": 420,
+          "scriptUri": "circular-visualizer.js",
+          "inputs": {
+            "colorStart": "#aa00ff",
+            "colorEnd": "#a2ff00"
+          }
+        },
+        {
+          "type": "script",
+          "id": "0UeYQ",
+          "x": 1375,
+          "y": 1168,
+          "name": "digital-time",
+          "clip": true,
+          "width": 379,
+          "height": 300,
+          "scriptUri": "digital-time.js"
+        },
+        {
+          "type": "script",
+          "id": "FnzLh",
+          "x": 164,
+          "y": 1169,
+          "name": "clock",
+          "width": 300,
+          "height": 300,
+          "scriptUri": "clock.js",
+          "inputs": {
+            "Seconds": 36.4,
+            "Minutes": 29.4
+          }
+        },
+        {
+          "type": "script",
+          "id": "EAqUa",
+          "x": 984.6543395563367,
+          "y": 1169,
+          "name": "radar",
+          "rotation": -0.12496974890920316,
+          "width": 300,
+          "height": 300,
+          "scriptUri": "radar.js"
+        },
+        {
+          "type": "script",
+          "id": "DPpY0",
+          "x": 573.6543395563367,
+          "y": 1168,
+          "name": "gauge",
+          "rotation": -0.12496974890920316,
+          "width": 300,
+          "height": 300,
+          "scriptUri": "gauge.js"
+        },
+        {
+          "type": "script",
+          "id": "eY6pT",
+          "x": 888,
+          "y": 614,
+          "name": "candlestick",
+          "clip": true,
+          "width": 540,
+          "height": 361,
+          "scriptUri": "candlestick.js",
+          "inputs": {
+            "wickWidth": 2,
+            "bearColor": "#ef4444",
+            "bullColor": "#22c55e",
+            "candles": 50
+          }
+        },
+        {
+          "type": "frame",
+          "id": "tZxai",
+          "x": 165.3304904312181,
+          "y": 1616,
+          "name": "Frame 11",
+          "rotation": -0.12496974890920316,
+          "clip": true,
+          "width": 650,
+          "height": 610,
+          "fill": "#000000ff",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "script",
+              "id": "GqqH5",
+              "clip": true,
+              "width": "fill_container",
+              "height": "fill_container",
+              "scriptUri": "flow-field.js",
+              "inputs": {
+                "fadeTrails": true,
+                "particles": 1000,
+                "steps": 20,
+                "noiseStrength": 5,
+                "lineWidth": 4,
+                "noiseScale": 0,
+                "time": "$time",
+                "stepSize": 3,
+                "timeScale": 0.2,
+                "color1": "#3939ff",
+                "color2": "#6969ff",
+                "color3": "#7777f8",
+                "color4": "#b4b4fd",
+                "bgColor": "#000000"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "time": {
+      "type": "number",
+      "value": 0
+    }
+  }
+}

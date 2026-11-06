@@ -58,7 +58,7 @@ pub fn show(lib: &Library, h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec
     // ---- toolbar: sort and view toggle
     if !trash {
         let y = top + 4.0;
-        let label = h.sort.label();
+        let label = crate::i18n::tr(h.sort.label());
         let w = widgets::text_width(&p, label, &theme::font_body()) + 40.0;
         let sr = Rect::from_min_size(Pos2::new(rect.left() + pad - 8.0, y), Vec2::new(w, 28.0));
         let resp = ui.interact(sr, Id::new("home-sort"), Sense::click());
@@ -129,7 +129,7 @@ fn breadcrumb(h: &Home, ui: &mut Ui, p: &egui::Painter, at: Pos2, acts: &mut Vec
                 acts.push(Act::Go(section));
             }
         }
-        p.text(Pos2::new(x, at.y), Align2::LEFT_CENTER, &label, font.clone(), color);
+        p.text(Pos2::new(x, at.y), Align2::LEFT_CENTER, crate::i18n::tr_text(&label), font.clone(), color);
         x += w;
         if i < last {
             p.text(Pos2::new(x + 8.0, at.y), Align2::LEFT_CENTER, "/", font.clone(), theme::TEXT_TERTIARY);
@@ -140,6 +140,7 @@ fn breadcrumb(h: &Home, ui: &mut Ui, p: &egui::Painter, at: Pos2, acts: &mut Vec
 
 /// Right-aligned button; moves `right` to its left edge.
 fn button(ui: &mut Ui, p: &egui::Painter, right: &mut f32, cy: f32, label: &str, kind: Kind, record: &str) -> Response {
+    let label = crate::i18n::tr(label);
     let font = theme::font_body_strong();
     let w = widgets::text_width(p, label, &font) + 28.0;
     let r = Rect::from_min_size(Pos2::new(*right - w, cy - 16.0), Vec2::new(w, 32.0));
@@ -183,7 +184,7 @@ fn empty_state(h: &Home, ui: &Ui, area: Rect) {
         (format!("No files match \u{201c}{}\u{201d}", h.search.trim()), "Try a different name.".to_string())
     } else {
         match &h.section {
-            Section::Recents => ("No files yet".into(), "Create a design file, or import a .fig, .svg or .desigma file to get started.".into()),
+            Section::Recents => ("No files yet".into(), "Create a design file, or import a .fig, .pen, .svg or .desigma file to get started.".into()),
             Section::Starred => ("Nothing starred".into(), "Right-click a file and choose Star to keep it handy here.".into()),
             Section::Project(..) => ("This project is empty".into(), "Create a design file here, or drag files in from other projects.".into()),
             Section::Trash => ("Trash is empty".into(), "Files and projects you delete wait here until you empty the trash.".into()),
@@ -192,8 +193,8 @@ fn empty_state(h: &Home, ui: &Ui, area: Rect) {
     let p = ui.painter();
     let c = area.center();
     icons::paint(p, Icon::File, Pos2::new(c.x, c.y - 44.0), 32.0, theme::ICON_TERTIARY);
-    p.text(Pos2::new(c.x, c.y), Align2::CENTER_CENTER, title, theme::font_large_strong(), theme::TEXT);
-    let galley = p.layout(body, theme::font_body(), theme::TEXT_SECONDARY, 360.0_f32.min(area.width() - 48.0));
+    p.text(Pos2::new(c.x, c.y), Align2::CENTER_CENTER, crate::i18n::tr_text(&title), theme::font_large_strong(), theme::TEXT);
+    let galley = p.layout(crate::i18n::tr_text(&body).into_owned(), theme::font_body(), theme::TEXT_SECONDARY, 360.0_f32.min(area.width() - 48.0));
     let pos = Pos2::new(c.x - galley.size().x / 2.0, c.y + 18.0);
     p.galley(pos, galley, theme::TEXT_SECONDARY);
 }
@@ -291,7 +292,7 @@ fn files_view(lib: &Library, h: &mut Home, ui: &mut Ui, content: Rect, acts: &mu
             let hr = Rect::from_min_size(Pos2::new(x0, y), Vec2::new(inner_w, 28.0));
             let cols_x = list_columns(hr.right());
             for (x, label) in [(hr.left() + 60.0, "Name"), (cols_x.0, "Project"), (cols_x.1, "Edited"), (cols_x.2, "Opened")] {
-                p.text(Pos2::new(x, hr.center().y), Align2::LEFT_CENTER, label, theme::font_small_medium(), theme::TEXT_TERTIARY);
+                p.text(Pos2::new(x, hr.center().y), Align2::LEFT_CENTER, crate::i18n::tr(label), theme::font_small_medium(), theme::TEXT_TERTIARY);
             }
             y += 28.0;
         }
@@ -425,11 +426,11 @@ fn thumb_area(p: &egui::Painter, area: Rect, tex: Tex, board: bool, radius: u8) 
 /// The "Board" badge on a board's card: a sticky note icon and the word, bottom left of the picture.
 fn board_badge(p: &egui::Painter, area: Rect) {
     let font = theme::font_small_strong();
-    let w = widgets::text_width(p, "Board", &font) + 28.0;
+    let w = widgets::text_width(p, crate::i18n::tr("Board"), &font) + 28.0;
     let r = Rect::from_min_size(Pos2::new(area.left() + 8.0, area.bottom() - 8.0 - 20.0), Vec2::new(w, 20.0));
     p.rect_filled(r, theme::cr(10), theme::BG_MENU);
     icons::paint(p, Icon::Sticky, Pos2::new(r.left() + 10.0, r.center().y), 12.0, theme::ICON);
-    p.text(Pos2::new(r.left() + 19.0, r.center().y), Align2::LEFT_CENTER, "Board", font, theme::TEXT);
+    p.text(Pos2::new(r.left() + 19.0, r.center().y), Align2::LEFT_CENTER, crate::i18n::tr("Board"), font, theme::TEXT);
 }
 
 /// A grid card: thumbnail, name, project and edit time.
@@ -487,8 +488,8 @@ fn list_row(p: &egui::Painter, r: Rect, f: &FileEntry, project: &str, tex: Tex, 
         icons::paint(p, Icon::Sticky, Pos2::new(r.left() + 68.0 + name_w + 14.0, r.center().y), 14.0, theme::ICON_SECONDARY);
     }
     p.text(Pos2::new(cols.0, r.center().y), Align2::LEFT_CENTER, widgets::elide(p, project, &font, 150.0), font.clone(), theme::TEXT_SECONDARY);
-    p.text(Pos2::new(cols.1, r.center().y), Align2::LEFT_CENTER, relative(now, f.modified), font.clone(), theme::TEXT_SECONDARY);
-    p.text(Pos2::new(cols.2, r.center().y), Align2::LEFT_CENTER, relative(now, f.opened), font, theme::TEXT_SECONDARY);
+    p.text(Pos2::new(cols.1, r.center().y), Align2::LEFT_CENTER, crate::i18n::tr_text(&relative(now, f.modified)), font.clone(), theme::TEXT_SECONDARY);
+    p.text(Pos2::new(cols.2, r.center().y), Align2::LEFT_CENTER, crate::i18n::tr_text(&relative(now, f.opened)), font, theme::TEXT_SECONDARY);
 }
 
 // ---------------------------------------------------------------- trash
@@ -514,7 +515,7 @@ fn trash_view(h: &mut Home, ui: &mut Ui, content: Rect, acts: &mut Vec<Act>) {
         p.text(
             Pos2::new(x0, y + 10.0),
             Align2::LEFT_CENTER,
-            "Items stay here until you empty the trash. Emptying it deletes them permanently.",
+            crate::i18n::tr("Items stay here until you empty the trash. Emptying it deletes them permanently."),
             theme::font_body(),
             theme::TEXT_SECONDARY,
         );

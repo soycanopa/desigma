@@ -2,7 +2,7 @@
 
 use crate::exec::Renderer;
 use crate::frame::Frame;
-use crate::present::Presenter;
+use crate::present::{PresentView, Presenter};
 
 /// Stored in egui's callback resources: `prepare` runs a frame into the host
 /// encoder, `paint` shows the result inside the host render pass.
@@ -22,6 +22,12 @@ impl Canvas {
     pub fn prepare(&mut self, dev: &wgpu::Device, enc: &mut wgpu::CommandEncoder, frame: &Frame) {
         let out = self.renderer.render(frame, enc);
         self.presenter.set_source(dev, &out.view);
+    }
+
+    /// How the last prepared frame maps onto the viewport (identity unless a zoom gesture
+    /// shows a previous frame scaled).
+    pub fn set_view(&self, queue: &wgpu::Queue, view: PresentView) {
+        self.presenter.set_view(queue, view);
     }
 
     /// Draws the prepared frame into the host pass' viewport.

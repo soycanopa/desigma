@@ -235,6 +235,83 @@ pub(crate) fn figma_id(doc: &Document, id: NodeId) -> String {
     doc.get(id).and_then(|n| n.source_id.clone()).unwrap_or_else(|| format!("9000:{}", id.0))
 }
 
+/// `componentPropertyDefinitions` (components and sets), `componentProperties`
+/// (instances: every property of their component, at the chosen value or its
+/// default, with variants read from the name of the component they show)
+/// and `componentPropertyReferences` (bound layers). Keys are property names;
+/// the importer drops Figma's `#<id>` suffix, so there is none to restore.
+fn component_props(doc: &Document, node: &Node, m: &mut Map<String, Value>) {
+    let value = |v: &PropValue| -> Option<(&'static str, Value)> {
+        Some(match v {
+            PropValue::Bool(b) => ("BOOLEAN", (*b).into()),
+            PropValue::Text(s) => ("TEXT", s.clone().into()),
+            PropValue::Variant(s) => ("VARIANT", s.clone().into()),
+            PropValue::Instance(id) => {
+                doc.get(*id)?;
+                ("INSTANCE_SWAP", figma_id(doc, *id).into())
+            }
+        })
+    };
+    let props = &node.component.props;
+    if !props.is_empty() && matches!(node.kind, NodeKind::Component(_) | NodeKind::ComponentSet(_)) {
+        let mut defs = Map::new();
+        for p in props {
+            let ty = match &p.kind {
+                PropKind::Boolean => "BOOLEAN",
+                PropKind::Text => "TEXT",
+                PropKind::Variant { .. } => "VARIANT",
+                PropKind::InstanceSwap { .. } => "INSTANCE_SWAP",
+            };
+            let mut d = Map::new();
+            d.insert("type".into(), ty.into());
+            if let Some((_, v)) = value(&p.default) {
+                d.insert("defaultValue".into(), v);
+            }
+            if let PropKind::Variant { options } = &p.kind {
+                d.insert("variantOptions".into(), options.clone().into());
+            }
+            defs.insert(p.name.clone(), Value::Object(d));
+        }
+        m.insert("componentPropertyDefinitions".into(), Value::Object(defs));
+    }
+    if let NodeKind::Instance { component: Some(c), .. } = node.kind {
+        let mut vals = Map::new();
+        // Like the REST API, list every property: unassigned ones at their default.
+        for p in prop_defs(doc, c) {
+            if let Some((ty, v)) = value(&p.default) {
+                vals.insert(p.name, json!({"type": ty, "value": v}));
+            }
+        }
+        let comp = doc.get(c);
+        if comp.and_then(|c| c.parent).and_then(|p| doc.get(p)).is_some_and(|p| matches!(p.kind, NodeKind::ComponentSet(_))) {
+            for (k, v) in parse_variant_name(comp.map(|c| c.name.as_str()).unwrap_or_default()) {
+                vals.insert(k, json!({"type": "VARIANT", "value": v}));
+            }
+        }
+        for (k, v) in &node.component.values {
+            if let Some((ty, v)) = value(v) {
+                vals.insert(k.clone(), json!({"type": ty, "value": v}));
+            }
+        }
+        if !vals.is_empty() {
+            m.insert("componentProperties".into(), Value::Object(vals));
+        }
+    }
+    let mut refs = Map::new();
+    for (f, p) in &node.component.bindings {
+        let key = match f {
+            OverrideField::Visible => "visible",
+            OverrideField::Characters => "characters",
+            OverrideField::MainComponent => "mainComponent",
+            _ => continue,
+        };
+        refs.insert(key.into(), p.clone().into());
+    }
+    if !refs.is_empty() {
+        m.insert("componentPropertyReferences".into(), Value::Object(refs));
+    }
+}
+
 fn align_name(a: LayoutAlign) -> &'static str {
     match a {
         LayoutAlign::Start => "MIN",
@@ -473,6 +550,8 @@ fn export_node(doc: &Document, id: NodeId, parent_abs: Option<&Affine>, depth: u
             }
         }
     }
+
+    component_props(doc, node, &mut m);
 
     if let Some(g) = &node.fill_geometry {
         m.insert("fillGeometry".into(), geometry(g));

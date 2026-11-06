@@ -37,7 +37,7 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
         .frame(egui::Frame::NONE)
         .margin(egui::Margin::ZERO)
         .vertical_align(egui::Align::Center)
-        .hint_text(egui::RichText::new("Search files").font(theme::font_body()).color(theme::TEXT_TERTIARY))
+        .hint_text(egui::RichText::new(crate::i18n::tr("Search files")).font(theme::font_body()).color(theme::TEXT_TERTIARY))
         .min_size(tr.size())
         .desired_width(tr.width());
     ui.put(tr, te);
@@ -53,7 +53,7 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
     for (icon, label, section, key) in [(Icon::Clock, "Recents", Section::Recents, "recents"), (Icon::Star, "Starred", Section::Starred, "starred")] {
         let r = Rect::from_min_size(Pos2::new(x0 + 8.0, y), Vec2::new(w - 16.0, ROW_H));
         let selected = h.section == section && !h.searching();
-        if row(ui, r, Id::new(("home-nav", key)), icon, label, 0.0, selected, false, key).clicked() {
+        if row(ui, r, Id::new(("home-nav", key)), icon, crate::i18n::tr(label), 0.0, selected, false, key).clicked() {
             acts.push(Act::Go(section));
         }
         y += ROW_H;
@@ -61,7 +61,7 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
     y += 12.0;
 
     // ---- Projects header
-    p.text(Pos2::new(x0 + 20.0, y + 14.0), Align2::LEFT_CENTER, "Projects", theme::font_body_strong(), theme::TEXT_SECONDARY);
+    p.text(Pos2::new(x0 + 20.0, y + 14.0), Align2::LEFT_CENTER, crate::i18n::tr("Projects"), theme::font_body_strong(), theme::TEXT_SECONDARY);
     let plus = Rect::from_min_size(Pos2::new(x0 + w - 12.0 - 24.0, y + 2.0), Vec2::splat(24.0));
     if widgets::icon_button(ui, plus, "home-new-project", Icon::Plus, false, "New project").clicked() {
         acts.push(Act::NewProject);
@@ -71,7 +71,8 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
 
     // ---- project tree (scrolls)
     let trash_h = 52.0;
-    let list = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x0 + w, rect.bottom() - trash_h));
+    let footer_h = trash_h + ROW_H;
+    let list = Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x0 + w, rect.bottom() - footer_h));
     let rows = tree_rows(h);
     let content_h = rows.len() as f32 * ROW_H + 8.0;
     crate::panels::wheel_scroll(ui, list, &mut h.side_scroll, content_h);
@@ -83,7 +84,13 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
     let mut dropzones: Vec<(Rect, DropTo)> = vec![];
     crate::panels::clipped(ui, list, |ui| {
         if rows.is_empty() {
-            ui.painter().text(Pos2::new(x0 + 20.0, list.top() + 16.0), Align2::LEFT_CENTER, "No projects yet", theme::font_body(), theme::TEXT_TERTIARY);
+            ui.painter().text(
+                Pos2::new(x0 + 20.0, list.top() + 16.0),
+                Align2::LEFT_CENTER,
+                crate::i18n::tr("No projects yet"),
+                theme::font_body(),
+                theme::TEXT_TERTIARY,
+            );
         }
         for (i, tr) in rows.iter().enumerate() {
             let r = Rect::from_min_size(Pos2::new(x0 + 8.0, list.top() + i as f32 * ROW_H - scroll), Vec2::new(w - 16.0, ROW_H));
@@ -134,12 +141,18 @@ pub fn show(h: &mut Home, ui: &mut Ui, rect: Rect, acts: &mut Vec<Act>) {
         h.menu = secondary;
     }
 
-    // ---- trash
+    // ---- Claude, then trash
+    let cr = Rect::from_min_size(Pos2::new(x0 + 8.0, rect.bottom() - footer_h + 4.0), Vec2::new(w - 16.0, ROW_H));
+    if row(ui, cr, Id::new("home-claude"), Icon::Link, "Claude", 0.0, false, false, "home-claude").clicked() {
+        acts.push(Act::Mcp);
+    }
     widgets::hline(&p, x0, x0 + w, rect.bottom() - trash_h, theme::BORDER);
     let tr = Rect::from_min_size(Pos2::new(x0 + 8.0, rect.bottom() - trash_h + 10.0), Vec2::new(w - 16.0, ROW_H));
     let n = h.snap.trash.len();
     let label = if n > 0 { format!("Trash ({n})") } else { "Trash".to_string() };
-    if row(ui, tr, Id::new("home-trash"), Icon::Trash, &label, 0.0, h.section == Section::Trash && !h.searching(), false, "trash").clicked() {
+    if row(ui, tr, Id::new("home-trash"), Icon::Trash, &crate::i18n::tr_text(&label), 0.0, h.section == Section::Trash && !h.searching(), false, "trash")
+        .clicked()
+    {
         acts.push(Act::Go(Section::Trash));
     }
 }

@@ -53,7 +53,7 @@ impl HostWire for Wire<'_> {
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    /// Document to serve: `.desigma`, or a `.fig` / REST `.json` / `.svg` that is imported and
+    /// Document to serve: `.desigma`, or a `.fig` / `.pen` / REST `.json` / `.svg` that is imported and
     /// saved next to it as `.desigma`.
     pub file: PathBuf,
     pub password: Option<String>,

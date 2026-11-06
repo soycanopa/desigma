@@ -104,7 +104,7 @@ pub(crate) fn title(ui: &mut Ui, pane: &mut Pane, text: &str, action: Option<Ico
     ui.painter().text(
         Pos2::new(row.left() + theme::SECTION_CONTENT_X, row.center().y),
         Align2::LEFT_CENTER,
-        text,
+        crate::i18n::tr(text),
         theme::font_body_strong(),
         if dim { theme::TEXT_SECONDARY } else { theme::TEXT },
     );
@@ -158,7 +158,7 @@ pub(crate) fn paint_title(app: &mut App, ui: &mut Ui, pane: &mut Pane, sel: &[No
 
 pub(crate) fn sublabel(ui: &Ui, pane: &mut Pane, text: &str) {
     let r = pane.rect(theme::SECTION_CONTENT_X, 0.0, theme::SECTION_CONTENT_W, theme::SUBLABEL_HEIGHT);
-    ui.painter().text(Pos2::new(r.left(), r.center().y), Align2::LEFT_CENTER, text, theme::font_small_medium(), theme::TEXT_SECONDARY);
+    ui.painter().text(Pos2::new(r.left(), r.center().y), Align2::LEFT_CENTER, crate::i18n::tr(text), theme::font_small_medium(), theme::TEXT_SECONDARY);
     pane.y += theme::SUBLABEL_HEIGHT + 4.0;
 }
 

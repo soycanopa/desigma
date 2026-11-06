@@ -159,6 +159,11 @@ fn nested_instances_resolve_multi_step_paths() {
     assert_eq!(text(child(&d, copy_in, "Label")).content, "Deep");
     // The wrapper's nested copy is not affected by the outer override.
     assert_eq!(text(child(&d, card_in, "Label")).content, "Inner text");
+    // Copies two levels down keep Figma's flat id form, `I<wrapInst>;<cardIn>;<label>`.
+    let label = child(&d, copy_in, "Label").source_id.clone().unwrap();
+    assert!(label.starts_with('I') && !label[1..].contains('I'), "{label}");
+    assert_eq!(label.split(';').count(), 3, "{label}");
+    assert!(d.nodes.values().filter_map(|n| n.source_id.as_deref()).all(|s| !s.contains(";I")));
 }
 
 #[test]

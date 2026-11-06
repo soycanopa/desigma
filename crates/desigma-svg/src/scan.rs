@@ -7,6 +7,10 @@ use std::collections::HashMap;
 
 /// Prefix of ids we inject; never shown as layer names.
 pub const GENERATED_ID: &str = "__dsg";
+/// Injected on an unnamed `<g>` with several element children so usvg keeps it and the
+/// converter does not fold it: in hand-written SVG such a group is an artboard or a
+/// section, not a wrapper. Starts with [`GENERATED_ID`], so it is never shown as a name.
+pub const KEPT_GROUP_ID: &str = "__dsgg";
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Shape {
@@ -49,6 +53,16 @@ pub fn prescan(svg: &str) -> Scanned {
                 Shape::Rect { rx, ry }
             }
             "circle" | "ellipse" => Shape::Ellipse,
+            "g" => {
+                let unnamed = node.attribute("id").is_none_or(str::is_empty) && node.attribute("data-name").is_none();
+                if unnamed && node.children().filter(|c| c.is_element()).count() >= 2 {
+                    let id = format!("{KEPT_GROUP_ID}{counter}");
+                    counter += 1;
+                    let start = node.range().start;
+                    inserts.push((start + 2, format!(" id=\"{id}\"")));
+                }
+                continue;
+            }
             _ => continue,
         };
         let id = match node.attribute("id") {

@@ -29,6 +29,7 @@ desigma-library.workspace = true
 desigma-fonts.workspace = true
 desigma-export.workspace = true
 desigma-svg.workspace = true
+desigma-pen.workspace = true
 desigma-gpu.workspace = true
 desigma-mcp.workspace = true
 desigma-collab.workspace = true

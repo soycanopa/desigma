@@ -146,7 +146,6 @@ pub fn process(app: &mut App, ui: &mut Ui, rect: ERect, resp: &Response) {
             if let Some(p) = inp.pos {
                 let z = app.view.zoom * zoom_delta;
                 app.view.zoom_at(rect.min, p, z);
-                app.changed();
             }
         } else if scroll != egui::Vec2::ZERO {
             let mut s = scroll;
@@ -154,7 +153,6 @@ pub fn process(app: &mut App, ui: &mut Ui, rect: ERect, resp: &Response) {
                 s = egui::vec2(s.y, 0.0);
             }
             app.view.offset = v2(app.view.offset.x - s.x / app.view.zoom, app.view.offset.y - s.y / app.view.zoom);
-            app.changed();
         }
     }
 
@@ -445,7 +443,6 @@ fn on_drag(app: &mut App, ui: &Ui, rect: ERect, inp: &Inp) {
         Interaction::Pan => {
             let d = ui.input(|i| i.pointer.delta());
             app.view.offset = v2(app.view.offset.x - d.x / zoom, app.view.offset.y - d.y / zoom);
-            app.changed();
         }
         Interaction::Pending(p) => {
             if (pos - p.start_screen).length() > theme::DRAG_THRESHOLD_PX {

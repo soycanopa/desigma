@@ -104,13 +104,13 @@ pub fn button(ui: &mut Ui, rect: Rect, id: impl widgets::Key, label: &str, prima
         p.rect_filled(rect, theme::cr(theme::RADIUS_MEDIUM), bg);
     }
     let col = if !enabled { theme::TEXT_DISABLED } else { theme::TEXT };
-    p.text(rect.center(), Align2::CENTER_CENTER, label, theme::font_body_strong(), col);
+    p.text(rect.center(), Align2::CENTER_CENTER, crate::i18n::tr(label), theme::font_body_strong(), col);
     resp
 }
 
 /// Width of a [`button`] for `label`.
 pub fn button_width(p: &Painter, label: &str) -> f32 {
-    widgets::text_width(p, label, &theme::font_body_strong()) + 24.0
+    widgets::text_width(p, crate::i18n::tr(label), &theme::font_body_strong()) + 24.0
 }
 
 /// The "…" button.

@@ -1,7 +1,8 @@
 //! Complex scripts that need a font beyond the bundled Inter.
 //!
-//! Inter has no Arabic, Hebrew or Devanagari glyphs, and which fallback fonts the system
-//! provides varies, so documents that use these scripts get the matching Noto Sans family
+//! Inter has no Arabic, Hebrew, Devanagari, Chinese, Japanese or Korean glyphs, and which
+//! fallback fonts the system provides varies, so documents that use these scripts get the
+//! matching Noto Sans family
 //! (OFL, from Fontsource) fetched on demand and registered with the renderer, where it
 //! serves as the fallback for characters the text's own font lacks.
 
@@ -14,10 +15,15 @@ pub enum Script {
     Arabic,
     Hebrew,
     Devanagari,
+    /// Han ideographs and CJK punctuation; Noto Sans SC also covers kana.
+    Han,
+    /// Hiragana and katakana, with Noto Sans JP's Japanese glyph forms.
+    Kana,
+    Hangul,
 }
 
 impl Script {
-    pub const ALL: [Script; 3] = [Script::Arabic, Script::Hebrew, Script::Devanagari];
+    pub const ALL: [Script; 6] = [Script::Arabic, Script::Hebrew, Script::Devanagari, Script::Han, Script::Kana, Script::Hangul];
 
     /// The open-source family used for the script.
     pub fn family(self) -> &'static str {
@@ -25,7 +31,39 @@ impl Script {
             Script::Arabic => "Noto Sans Arabic",
             Script::Hebrew => "Noto Sans Hebrew",
             Script::Devanagari => "Noto Sans Devanagari",
+            Script::Han => "Noto Sans SC",
+            Script::Kana => "Noto Sans JP",
+            Script::Hangul => "Noto Sans KR",
         }
+    }
+
+    /// Installed families that already cover the script, so the Noto download can be skipped
+    /// (common system CJK fonts on macOS, Windows and Linux).
+    pub fn system_alternatives(self) -> &'static [&'static str] {
+        match self {
+            Script::Han | Script::Kana => &[
+                "Noto Sans CJK SC",
+                "Noto Sans CJK JP",
+                "Source Han Sans SC",
+                "PingFang SC",
+                "Hiragino Sans GB",
+                "Hiragino Sans",
+                "Heiti SC",
+                "Microsoft YaHei",
+                "SimSun",
+                "Yu Gothic",
+                "Meiryo",
+                "WenQuanYi Micro Hei",
+                "WenQuanYi Zen Hei",
+            ],
+            Script::Hangul => &["Noto Sans CJK KR", "Apple SD Gothic Neo", "Malgun Gothic", "NanumGothic", "WenQuanYi Micro Hei", "WenQuanYi Zen Hei"],
+            _ => &[],
+        }
+    }
+
+    /// The script whose Noto fallback `family` is.
+    pub fn of_family(family: &str) -> Option<Script> {
+        Script::ALL.into_iter().find(|s| s.family().eq_ignore_ascii_case(family))
     }
 
     /// Fontsource subset that holds the script's glyphs.
@@ -34,6 +72,9 @@ impl Script {
             Script::Arabic => "arabic",
             Script::Hebrew => "hebrew",
             Script::Devanagari => "devanagari",
+            Script::Han => "chinese-simplified",
+            Script::Kana => "japanese",
+            Script::Hangul => "korean",
         }
     }
 }
@@ -45,6 +86,24 @@ pub fn script_of(c: char) -> Option<Script> {
         0x0600..=0x06FF | 0x0750..=0x077F | 0x08A0..=0x08FF | 0xFB50..=0xFDFF | 0xFE70..=0xFEFF => Some(Script::Arabic),
         0x0590..=0x05FF | 0xFB1D..=0xFB4F => Some(Script::Hebrew),
         0x0900..=0x097F | 0xA8E0..=0xA8FF => Some(Script::Devanagari),
+        // Hiragana, katakana (+ phonetic extensions) and halfwidth katakana; checked before
+        // the fullwidth block below, which contains the halfwidth forms.
+        0x3040..=0x30FF | 0x31F0..=0x31FF | 0xFF65..=0xFF9F => Some(Script::Kana),
+        // Hangul syllables, jamo, compatibility jamo, extended jamo and halfwidth jamo
+        0xAC00..=0xD7AF | 0x1100..=0x11FF | 0x3130..=0x318F | 0xA960..=0xA97F | 0xD7B0..=0xD7FF | 0xFFA0..=0xFFDC => Some(Script::Hangul),
+        // CJK unified ideographs (+ extension A, compatibility, extension B and up), CJK
+        // radicals, symbols and punctuation, bopomofo, enclosed CJK and fullwidth forms
+        0x4E00..=0x9FFF
+        | 0x3400..=0x4DBF
+        | 0xF900..=0xFAFF
+        | 0x20000..=0x3134F
+        | 0x2E80..=0x2FDF
+        | 0x3000..=0x303F
+        | 0x3100..=0x312F
+        | 0x31A0..=0x31BF
+        | 0x3200..=0x33FF
+        | 0xFE30..=0xFE4F
+        | 0xFF00..=0xFFEF => Some(Script::Han),
         _ => None,
     }
 }
@@ -87,9 +146,24 @@ mod tests {
         assert_eq!(script_of('\u{05D0}'), Some(Script::Hebrew));
         assert_eq!(script_of('\u{0928}'), Some(Script::Devanagari));
         assert_eq!(script_of('a'), None);
-        assert_eq!(script_of('\u{4E2D}'), None);
+        assert_eq!(script_of('\u{4E2D}'), Some(Script::Han)); // 中
+        assert_eq!(script_of('\u{3002}'), Some(Script::Han)); // ideographic full stop
+        assert_eq!(script_of('\u{FF01}'), Some(Script::Han)); // fullwidth !
+        assert_eq!(script_of('\u{3042}'), Some(Script::Kana)); // あ
+        assert_eq!(script_of('\u{FF71}'), Some(Script::Kana)); // halfwidth ア
+        assert_eq!(script_of('\u{D55C}'), Some(Script::Hangul)); // 한
+        assert_eq!(scripts_in("用户列表 靓号管理"), BTreeSet::from([Script::Han]));
+        assert_eq!(scripts_in("日本語のテキスト"), BTreeSet::from([Script::Han, Script::Kana]));
         assert_eq!(scripts_in("abc \u{05D0} \u{0645}\u{0928}"), BTreeSet::from([Script::Arabic, Script::Hebrew, Script::Devanagari]));
         assert!(scripts_in("plain text 123").is_empty());
+    }
+
+    #[test]
+    fn cjk_scripts_know_their_system_alternatives() {
+        assert_eq!(Script::of_family("noto sans sc"), Some(Script::Han));
+        assert!(Script::Han.system_alternatives().contains(&"Microsoft YaHei"));
+        assert!(Script::Hangul.system_alternatives().contains(&"Malgun Gothic"));
+        assert!(Script::Arabic.system_alternatives().is_empty());
     }
 
     #[test]

@@ -57,7 +57,7 @@ impl TileView {
     }
 }
 
-fn page_background(app: &App) -> Color32 {
+pub(super) fn page_background(app: &App) -> Color32 {
     match app.doc.get(app.page).map(|n| &n.kind) {
         Some(NodeKind::Page { background }) => {
             let f = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;

@@ -28,5 +28,5 @@ pub use context::{GpuContext, GpuError};
 pub use exec::{ExecStats, Output, Renderer};
 pub use frame::{Frame, FrameStats};
 pub use headless::HeadlessGpu;
-pub use present::Presenter;
+pub use present::{PresentView, Presenter};
 pub use wgpu;

@@ -1157,11 +1157,46 @@ impl Ctx {
         for k in self.doc.get(d).map(|n| n.children.clone()).unwrap_or_default() {
             let _ = self.doc.remove(k);
         }
-        if let Some(NodeKind::Instance { component, component_key, .. }) = self.doc.get_mut(d).map(|n| &mut n.kind) {
-            *component = Some(target);
-            *component_key = None;
+        // Like Figma, a layer still named after its component takes the new
+        // component's name; a renamed one keeps its own. Name overrides are
+        // applied after the swap.
+        let rename = match (current.and_then(|c| self.display_name(c)), self.display_name(target)) {
+            (Some(old), Some(new)) if self.doc.get(d).is_some_and(|n| n.name == old) => Some(new),
+            _ => None,
+        };
+        if let Some(n) = self.doc.get_mut(d) {
+            if let NodeKind::Instance { component, component_key, .. } = &mut n.kind {
+                *component = Some(target);
+                *component_key = None;
+            }
+            if let Some(name) = rename {
+                n.name = name;
+            }
         }
         self.expand_instance(d, target);
+        // The fresh children are at 1x; a slot made with the scale tool keeps its scale.
+        if let Some(s) = self.scale_of(d) {
+            self.scale_contents(d, s);
+        }
+    }
+
+    /// `uniformScaleFactor` of `id`, or of the node an instance copy was made from.
+    fn scale_of(&self, mut id: NodeId) -> Option<f32> {
+        for _ in 0..MAX_DEPTH {
+            if let Some(s) = self.scales.get(&id) {
+                return Some(*s);
+            }
+            id = self.doc.get(id)?.component.source?;
+        }
+        None
+    }
+
+    /// Name an instance of `comp` gets by default: the component set's name
+    /// for a variant, else the component's own.
+    fn display_name(&self, comp: NodeId) -> Option<String> {
+        let c = self.doc.get(comp)?;
+        let set = c.parent.and_then(|p| self.doc.get(p)).filter(|p| matches!(p.kind, NodeKind::ComponentSet(_)));
+        Some(set.unwrap_or(c).name.clone())
     }
 
     /// `.fig` library components of internal-only canvases become external
@@ -1200,11 +1235,23 @@ impl Ctx {
         if !self.doc.get(inst).map(|n| n.children.is_empty()).unwrap_or(false) || self.doc.is_ancestor(comp, inst) || comp == inst {
             return;
         }
-        let prefix = self.doc.get(inst).and_then(|n| n.source_id.clone()).unwrap_or_default();
+        let prefix = self.rest_key(inst).unwrap_or_default();
         let kids = self.doc.get(comp).map(|n| n.children.clone()).unwrap_or_default();
         let mut budget = 50_000usize;
         for k in kids {
             self.clone_subtree(k, inst, &prefix, &mut budget, 0);
+        }
+    }
+
+    /// The id a node contributes to instance-copy ids. A node of a library
+    /// component copy is addressed by its library-side id (`.fig`
+    /// overrideKey), as Figma's REST ids are; a copy already carries its full
+    /// `I...` path.
+    fn rest_key(&self, node: NodeId) -> Option<String> {
+        let sid = self.doc.get(node)?.source_id.clone();
+        match sid {
+            Some(s) if s.starts_with('I') => Some(s),
+            other => self.override_keys.get(&node).cloned().or(other),
         }
     }
 
@@ -1219,7 +1266,7 @@ impl Ctx {
         n.id = id;
         n.children.clear();
         n.parent = None;
-        n.source_id = orig.source_id.as_ref().map(|s| format!("I{prefix};{s}"));
+        n.source_id = self.rest_key(src).map(|s| instance_copy_id(prefix, &s));
         n.component.source = Some(src);
         n.component.overrides.clear();
         n.component.props.clear();
@@ -1483,6 +1530,15 @@ fn style_meta(styles: Option<&Value>, doc: &Document) -> BTreeMap<String, StyleM
 /// Property name without Figma's `#<id>` suffix.
 fn prop_name(key: &str) -> String {
     key.split('#').next().unwrap_or(key).to_string()
+}
+
+/// REST id of `src` copied into the instance `inst`: one `I` and the flat
+/// guid path, as Figma writes it (`I<inst>;<a>;<b>`), also when `inst` or
+/// `src` is itself a copy inside another instance.
+fn instance_copy_id(inst: &str, src: &str) -> String {
+    let inst = inst.strip_prefix('I').unwrap_or(inst);
+    let src = src.strip_prefix('I').unwrap_or(src);
+    format!("I{inst};{src}")
 }
 
 /// For an id inside an instance copy (`I<inst>;<a>;<b>`), the id of the node

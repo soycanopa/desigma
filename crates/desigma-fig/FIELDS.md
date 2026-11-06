@@ -11,6 +11,10 @@ private local copies and are never committed. "Confirmed" means seen in at
 least one of them. "Unconfirmed" means the name is a guess (kept because it is
 harmless when absent) or was never present in these files.
 
+A third file, a game UI file (`game-ui.fig`, about 47k node changes, container
+version 106, private as well), was checked node by node against the REST API's
+JSON for the same file; rows that say "the third file" refer to it.
+
 Dump any file with `cargo run --release -p desigma-fig --example fig2json -- file.fig`
 and render its frames with `--example fig_render`.
 
@@ -27,7 +31,8 @@ and render its frames with `--example fig_render`.
 | Corners | `cornerRadius`, `rectangle{TopLeft,TopRight,BottomLeft,BottomRight}CornerRadius`, `rectangleCornerRadiiIndependent`, `cornerSmoothing` | confirmed |
 | Strokes | `strokePaints`, `strokeWeight`, `strokeAlign` (INSIDE/OUTSIDE/CENTER), `strokeCap` (only ROUND seen), `strokeJoin`, `dashPattern`, `border{Top,Right,Bottom,Left}Weight`, `borderStrokeWeightsIndependent`, `miterLimit` | confirmed |
 | Frames | `frameMaskDisabled` (absent = clips) | confirmed |
-| Auto layout | `stackMode` HORIZONTAL/VERTICAL, `stackSpacing`, `stackCounterSpacing`, `stackHorizontalPadding`, `stackVerticalPadding`, `stackPaddingRight`, `stackPaddingBottom`, `stackPrimaryAlignItems` (CENTER/MAX/SPACE_EVENLY), `stackCounterAlignItems`, `stackChildAlignSelf` (STRETCH/MAX/CENTER), `stackChildPrimaryGrow`, `stackReverseZIndex`, `resizeToFit` | confirmed |
+| Groups | no `GROUP` node type: a group is a `FRAME` with `resizeToFit: true` and no `stackMode`; imported as `GROUP` (all 274 checked against REST ids in a third file) | confirmed |
+| Auto layout | `stackMode` HORIZONTAL/VERTICAL, `stackSpacing`, `stackCounterSpacing`, `stackHorizontalPadding`, `stackVerticalPadding`, `stackPaddingRight`, `stackPaddingBottom`, `stackPrimaryAlignItems` (CENTER/MAX/SPACE_EVENLY), `stackCounterAlignItems`, `stackChildAlignSelf` (STRETCH/MAX/CENTER), `stackChildPrimaryGrow`, `stackReverseZIndex` | confirmed |
 | Auto layout sizing | `stackPrimarySizing`: only `FIXED` is ever written, absent means hug. `stackCounterSizing`: only `RESIZE_TO_FIT_WITH_IMPLICIT_SIZE` is written, absent means fixed. (Checked against stored sizes: absent primary hugs its children.) Fixed in this change; it used to read absent primary as fixed | confirmed |
 | Wrap / absolute / min-max | `stackWrap`, `stackPositioning`, `minSize` / `maxSize` | unconfirmed |
 | Star | `count`, `starInnerScale` | confirmed |
@@ -77,14 +82,15 @@ and render its frames with `--example fig_render`.
 | Component set | `FRAME` with `isStateGroup: true`, `stateGroupPropertyValueOrders [{property, values}]`; variants carry `variantPropSpecs [{propDefId, value}]` | confirmed |
 | Instance | `symbolData {symbolID, symbolOverrides [...], uniformScaleFactor}`, `derivedSymbolData [...]`, `derivedSymbolDataLayoutVersion`, `propsAreBubbled`. **Instances never store children** | confirmed |
 | Override paths | `guidPath {guids [..]}` holds `overrideKey` values, not node guids (1 to 3 entries; nested instances take two or more) | confirmed |
+| Instance copy ids | REST names a copied node `I<instance>;<a>;<b>`: one `I`, then the flat path. A segment is the node's `overrideKey` when it has one (the library-side id of a library component copy), else its guid. Matches REST ids for all 10,127 instance-internal nodes of the third file | confirmed |
 | Override content | any NodeChange fields: `size`, `transform`, `fillPaints`, `strokePaints`, `strokeWeight`, `textData`, `fontName`, `styleIdForFill` (`{assetRef}`), `fillGeometry`, `strokeGeometry`, ... | confirmed |
-| Nested instance swap | override entry `{guidPath: [<slot>], overriddenSymbolID: <SYMBOL guid>}` replaces the nested instance's component; deeper entries under `[<slot>, ...]` then address the swapped component's children | confirmed (product UI file: list rows swapping their icon slot) |
+| Nested instance swap | override entry `{guidPath: [<slot>], overriddenSymbolID: <SYMBOL guid>}` replaces the nested instance's component; deeper entries under `[<slot>, ...]` then address the swapped component's children. A slot with `uniformScaleFactor` keeps it: the swapped-in contents are scaled too (the third file has such slots at 0.875 and 2) | confirmed (product UI file: list rows swapping their icon slot) |
 | Override paints bound to variables | `fillPaints` / `strokePaints` inside an override entry carry `colorVar` like node paints do; the literal `color` beside the alias can be stale (a dark-theme text override stored `#0A0A0A` next to an alias whose value is near-white), so the variable's value wins | confirmed (product UI file: dark-theme instances recolouring component text) |
 | Derived data | per path: `size`, `transform`, `fillGeometry`, `strokeGeometry` | confirmed |
 | Scale | `uniformScaleFactor` != 1 on instances made with the scale tool: copied contents scale by it | confirmed |
-| Property defs | `componentPropDefs [{id, name, type BOOL/TEXT/VARIANT/INSTANCE_SWAP, initialValue {boolValue / textValue{characters} / guidValue}, varValue, preferredValues, sortPosition}]` on the set; variants carry bare `{id, parentPropDefId}` aliases | confirmed |
-| Property values | instance `componentPropAssignments [{defID, value {boolValue / textValue / guidValue}, varValue}]` | confirmed |
-| Property refs | node `componentPropRefs [{defID, componentPropNodeField VISIBLE / TEXT_DATA / OVERRIDDEN_SYMBOL_ID}]`, with `parameterConsumptionMap` repeating them. All defIDs go through `parentPropDefId` | confirmed |
+| Property defs | `componentPropDefs [{id, name, type BOOL/TEXT/VARIANT/INSTANCE_SWAP, initialValue {boolValue / textValue{characters} / guidValue}, varValue, preferredValues, sortPosition}]` on the set; variants carry bare `{id, parentPropDefId}` aliases. In a third file nearly every def had only `varValue {dataType, resolvedDataType, value {boolValue / textDataValue{characters} / symbolIdValue{guid}}}` and no `initialValue` | confirmed |
+| Property values | instance `componentPropAssignments [{defID, value {boolValue / textValue / guidValue}, varValue}]`; `value` may be absent, leaving only `varValue` (same shape as in defs): 1,602 of 1,710 instance swaps and 86 of 185 booleans in the third file | confirmed |
+| Property refs | node `componentPropRefs [{defID, componentPropNodeField VISIBLE / TEXT_DATA / OVERRIDDEN_SYMBOL_ID}]`, with `parameterConsumptionMap` repeating them. The third file has no `componentPropRefs` at all: only `parameterConsumptionMap {entries [{variableField VISIBLE / TEXT_DATA / OVERRIDDEN_SYMBOL_ID, variableData {dataType PROP_REF, value {propRefValue {defId}}}}]}`. All defIDs go through `parentPropDefId` | confirmed |
 | Detached | `detachedSymbolId {assetRef}` | confirmed, ignored |
 
 ## Styles and libraries

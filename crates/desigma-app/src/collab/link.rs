@@ -102,10 +102,12 @@ pub trait GuestLink {
     fn leave(&self);
 }
 
-/// `DESIGMA_COLLAB_NETWORK=direct` skips relays and discovery (LAN, loopback, tests).
+/// `DESIGMA_COLLAB_NETWORK=direct` skips relays and discovery (LAN); `loopback` also binds
+/// 127.0.0.1 only (tests, same-machine sessions).
 pub fn network() -> Network {
     match std::env::var("DESIGMA_COLLAB_NETWORK") {
         Ok(v) if v.eq_ignore_ascii_case("direct") => Network::Direct,
+        Ok(v) if v.eq_ignore_ascii_case("loopback") => Network::Loopback,
         _ => Network::Internet,
     }
 }

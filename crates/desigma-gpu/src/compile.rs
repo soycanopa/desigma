@@ -701,6 +701,42 @@ impl Ctx<'_> {
         prog
     }
 
+    /// Content key of [`Self::sil_program`] blurred by `sigma`: everything the silhouette pixels
+    /// depend on, with its position relative to `rect` (quantized to 1/8 px). `None` when the
+    /// silhouette is drawn from the node's children, which this key does not cover.
+    #[allow(clippy::too_many_arguments)]
+    fn sil_key(&self, n: &Node, g: &NodeGeom, ts: sk::Transform, rect: IRect, dx: f32, dy: f32, grow: f32, opaque: bool, sigma: f32) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let fills = visible_fills(n);
+        let strokes = visible_strokes(n);
+        let text = matches!(n.kind, NodeKind::Text(_));
+        let own_shape = g.shape.as_ref().is_some_and(|sh| (sh.fillable && !fills.is_empty()) || !strokes.is_empty() || (opaque && sh.fillable));
+        if !text && !own_shape {
+            return None;
+        }
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        g.id.hash(&mut h);
+        opaque.hash(&mut h);
+        for v in [grow, sigma, ts.sx, ts.ky, ts.kx, ts.sy, n.stroke.weight] {
+            v.to_bits().hash(&mut h);
+        }
+        let q = |v: f32| (v * 8.0).round() as i64;
+        (q(ts.tx + dx - rect.x0 as f32), q(ts.ty + dy - rect.y0 as f32), rect.w(), rect.h()).hash(&mut h);
+        std::mem::discriminant(&n.stroke.align).hash(&mut h);
+        strokes.is_empty().hash(&mut h);
+        if !opaque {
+            let alphas = if text {
+                g.text.iter().map(|t| t.fills.iter().filter(|p| p.visible).map(|p| p.opacity).fold(0.0, f32::max)).collect::<Vec<_>>()
+            } else {
+                fills.iter().map(|p| if let d::PaintKind::Solid(c) = &p.kind { c.a * p.opacity } else { p.opacity }).collect()
+            };
+            for a in alphas {
+                a.to_bits().hash(&mut h);
+            }
+        }
+        Some(h.finish())
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn silhouette(&mut self, n: &Node, g: &Rc<NodeGeom>, ts: sk::Transform, dx: f32, dy: f32, grow: f32, opaque: bool, clip: ClipId) {
         let ts2 = ts.post_translate(dx, dy);
@@ -863,10 +899,16 @@ impl Ctx<'_> {
             return;
         }
         let s = self.sil_program(n, g, ts, rect, ox, oy, spread, false);
-        if sigma > 0.05 {
+        let blur = if sigma > 0.05 { sigma } else { 0.0 };
+        if blur > 0.0 {
             self.progs[s as usize].post.push(Post::Blur { sigma, clamp: false });
         }
-        let aux = (!show_behind).then(|| (self.sil_program(n, g, ts, rect, 0.0, 0.0, 0.0, true), AuxMode::MulInv));
+        self.progs[s as usize].cache = self.sil_key(n, g, ts, rect, ox, oy, spread, false, blur);
+        let aux = (!show_behind).then(|| {
+            let a = self.sil_program(n, g, ts, rect, 0.0, 0.0, 0.0, true);
+            self.progs[a as usize].cache = self.sil_key(n, g, ts, rect, 0.0, 0.0, 0.0, true, 0.0);
+            (a, AuxMode::MulInv)
+        });
         let tint = [color.r.clamp(0.0, 1.0), color.g.clamp(0.0, 1.0), color.b.clamp(0.0, 1.0), (color.a * alpha).clamp(0.0, 1.0)];
         self.push_op(Op::Composite(Box::new(CompositeOp { src: s, rect, opacity: 1.0, tint: Some(tint), aux, mode: CompMode::Over, clip })));
     }

@@ -262,7 +262,7 @@ Design and protocol: [docs/collaboration.md](docs/collaboration.md).
   <tr>
     <td width="33%" valign="top">
       <h4>🗂️ Formats</h4>
-      In: <code>.fig</code> (including FigJam boards and Motion data), Figma REST JSON, SVG and native <code>.desigma</code>. Out: <code>.desigma</code>, Figma REST JSON, PNG, JPG, SVG, PDF, and animated GIF, WebM and PNG sequences. Images in PNG, JPEG and WebP.
+      In: <code>.fig</code> (including FigJam boards and Motion data), Figma REST JSON, Pencil <code>.pen</code>, SVG and native <code>.desigma</code>. Out: <code>.desigma</code>, Figma REST JSON, PNG, JPG, SVG, PDF, and animated GIF, WebM and PNG sequences. Images in PNG, JPEG and WebP.
     </td>
     <td width="33%" valign="top">
       <h4>🔤 Type</h4>
@@ -286,6 +286,10 @@ desigma reads two kinds of Figma input, and both land in the same document model
 
 The `.fig` format is undocumented. Our decoder follows community reverse engineering and is tested against synthetic files, so expect gaps on real-world files and please report them.
 
+### Pencil files
+
+`.pen` files (the plain-JSON format of the [Pencil](https://docs.pencil.dev/for-developers/the-pen-format) design tool) open too, through *File → Open*, drag and drop, the projects home screen or `desigma file.pen`. Frames and auto layout, shapes, paths, text, fills, strokes, effects, components with instance overrides, and variables with themes come across; scripts, shaders and icon-library icons do not, and the toast on opening lists what was left out ([field mapping](crates/desigma-pen/FIELDS.md)). Like `.fig`, an imported `.pen` is not written back: Save goes to `.desigma`. This is file compatibility only; desigma is not affiliated with or endorsed by Pencil.
+
 ## Under the hood
 
 - **One document model:** `desigma-doc` is plain data plus an undo stack. Every edit is a `Command` with an exact inverse.
@@ -301,6 +305,7 @@ The `.fig` format is undocumented. Our decoder follows community reverse enginee
 | `desigma-render` | tiny-skia renderer, spatial index, parallel tile cache |
 | `desigma-gpu` | wgpu renderer with a CPU fallback |
 | `desigma-svg` | SVG import |
+| `desigma-pen` | Pencil `.pen` import |
 | `desigma-library` | Projects, team libraries, publishing and version history |
 | `desigma-fig` | Figma REST JSON and `.fig` import, REST JSON export |
 | `desigma-fonts` | Bundled Inter, Fontsource fetch and cache, font substitution |
@@ -381,8 +386,10 @@ Logos, social images, banners and copy are in [`marketing/`](marketing/).
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option. Unless you state otherwise, any contribution you submit for inclusion is dual-licensed the same way, without additional terms.
 
+The licenses cover the code, not the desigma name, logo or icon. Forks are welcome but must use their own name and branding; see [TRADEMARKS.md](TRADEMARKS.md).
+
 Bundled Inter is © The Inter Project Authors, licensed under the SIL Open Font License 1.1 (see `crates/desigma-fonts/assets/inter/OFL.txt`).
 
 Editor icons use Lucide under its ISC license (see `crates/desigma-app/assets/icons/lucide/LICENSE`). Release packages include both asset notices in `licenses/` (inside `desigma.app/Contents/Resources/` on macOS).
 
-desigma is an independent project. It is not affiliated with, endorsed by or sponsored by Figma, Inc. Figma is a trademark of Figma, Inc., used here only to describe file compatibility.
+desigma is an independent project. It is not affiliated with, endorsed by or sponsored by Figma, Inc. or Pencil. Figma and Pencil are trademarks of their owners, used here only to describe file compatibility.

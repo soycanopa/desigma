@@ -34,9 +34,9 @@ pub fn relative(now_ms: u64, then_ms: u64) -> String {
     }
 }
 
-/// "Edited 5 minutes ago" / "Edited just now".
+/// "Edited 5 minutes ago" / "Edited just now", in the UI language.
 pub fn edited(now_ms: u64, then_ms: u64) -> String {
-    format!("Edited {}", relative(now_ms, then_ms))
+    crate::i18n::trf("Edited {}", &[&crate::i18n::tr_text(&relative(now_ms, then_ms))])
 }
 
 #[cfg(test)]

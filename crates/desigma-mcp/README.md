@@ -47,7 +47,7 @@ The client launches the process and speaks MCP over stdin/stdout. The server doe
 1. Call `desigma_open_file` with a path inside the configured workspace, or `desigma_new_document` with a name.
 2. Use `desigma_get_document` to discover page IDs, then `desigma_list_nodes` and `desigma_get_node` to inspect layers. IDs are positive integers; obtain them from tool results rather than Figma node IDs.
 3. Inspect variables or generate handoff code. Make edits with the creation, update, and deletion tools; undo and redo operate on this session's edit history.
-4. Call `desigma_save_file` with an **unused** `.desigma` filename. Its parent directory must already exist. Open the resulting file in the desktop editor to continue there.
+4. Call `desigma_save_file` with an unused `.desigma` filename, or pass `"overwrite": true` to replace an existing one (for example the `path` that `desigma_get_document` reports for the file you opened). Its parent directory must already exist. Open the resulting file in the desktop editor to continue there.
 
 Example tool arguments:
 
@@ -61,9 +61,9 @@ desigma_update_node   {"node_id":42,"name":"Primary action","width":160}
 desigma_save_file     {"path":"output-v2.desigma"}
 ```
 
-`42` is illustrative: substitute an ID returned by the preceding queries. Relative paths resolve beneath `--workspace`. Absolute paths are accepted only within that same directory tree. Reads canonicalize paths and reject escapes; writes resolve the existing parent. `desigma_save_file` creates a new file and never overwrites an existing file or symlink; `desigma_export_image` overwrites an existing regular `.png` but never writes through a symlink.
+`42` is illustrative: substitute an ID returned by the preceding queries. Relative paths resolve beneath `--workspace`. Absolute paths are accepted only within that same directory tree. Reads canonicalize paths and reject escapes; writes resolve the existing parent. `desigma_save_file` creates a new file unless `overwrite: true` is passed, in which case it replaces an existing regular `.desigma` file atomically (temporary file + rename) and still never writes through a symlink; `desigma_export_image` overwrites an existing regular `.png` but never writes through a symlink.
 
-Edits remain in memory until saved. Restarting the server loses unsaved work. Opening another file or starting a new document resets undo history and refuses to discard pending edits unless `discard_changes: true` is explicitly supplied. Save each revision under a new filename; overwriting is not supported. Tool failures return an MCP error result with an explanatory message.
+Edits remain in memory until saved. Restarting the server loses unsaved work. Opening another file or starting a new document resets undo history and refuses to discard pending edits unless `discard_changes: true` is explicitly supplied. Save each revision under a new filename, or overwrite the file you opened with `overwrite: true`. Requests are handled one at a time in the order they arrive, so a batch of calls written in one go runs and answers in sequence. Tool failures return an MCP error result with an explanatory message.
 
 Imports are limited to 64 MiB per file, 100,000 layers, and 256 levels of nesting. The server validates the imported document graph before using it, rejecting malformed parent/child relationships and cycles.
 
@@ -71,9 +71,10 @@ Imports are limited to 64 MiB per file, 100,000 layers, and 256 levels of nestin
 
 | Tool | Purpose |
 | --- | --- |
-| `desigma_open_file` | Import a native `.desigma`, `.fig`, SVG, or supported JSON design into the session. |
+| `desigma_list_files` | Design files in this user's library, plus `shared/` copies of files opened from outside it while the agent bridge is on. Each `path` is valid for `desigma_open_file`. |
+| `desigma_open_file` | Import a native `.desigma`, `.fig`, `.pen` (Pencil), SVG, or supported JSON design into the session. |
 | `desigma_new_document` | Start an empty document with one page. |
-| `desigma_save_file` | Write the session to a new native `.desigma` file. |
+| `desigma_save_file` | Write the session to a native `.desigma` file: a new one, or an existing one with `overwrite: true`. |
 | `desigma_get_document` | Read document name, pages, counts, undo/redo availability, and `session` (`"file"` or `"editor"`). |
 | `desigma_list_nodes` | Search names case-insensitively or list direct children; paginate using `next_offset`. |
 | `desigma_get_node` | Read a complete native node, including child IDs, paints, geometry, text, and bindings. |

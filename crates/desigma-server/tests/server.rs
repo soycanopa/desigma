@@ -1,4 +1,4 @@
-//! The server logic in-process on `Network::Direct`: guests join through desigma-net, edit, and
+//! The server logic in-process on `Network::Loopback`: guests join through desigma-net, edit, and
 //! the document, the autosave and the link survive a restart.
 
 use desigma_collab::wire::{self, FontKey, ToGuest, ToHost};
@@ -41,7 +41,7 @@ fn seed(path: &Path) -> NodeId {
 fn config(file: &Path, port: u16) -> Config {
     let mut c = Config::new(file);
     c.password = Some("pw".into());
-    c.network = Network::Direct;
+    c.network = Network::Loopback;
     c.port = Some(port);
     c.autosave = Duration::from_millis(200);
     c.link_file = Some(file.with_extension("link"));
@@ -73,7 +73,7 @@ impl Running {
 
 fn join(link: &str, name: &str, pw: Option<&str>) -> Result<Guest, JoinError> {
     let ticket = Ticket::parse(link).unwrap();
-    Guest::join_blocking(&ticket, name, pw, GuestOptions { network: Network::Direct, ..Default::default() }, T).map(|(g, _)| g)
+    Guest::join_blocking(&ticket, name, pw, GuestOptions { network: Network::Loopback, ..Default::default() }, T).map(|(g, _)| g)
 }
 
 fn send(g: &Guest, m: ClientMsg) {
@@ -371,7 +371,7 @@ fn a_severed_guest_resumes_as_the_same_peer_and_edits_converge() {
 
     // Ana returns with her secret: same peer index, no password needed to be asked again
     let ticket = Ticket::parse(&link).unwrap();
-    let ana2 = Guest::join_resume(&ticket, "Ana", None, GuestOptions { network: Network::Direct, ..Default::default() }, token).unwrap();
+    let ana2 = Guest::join_resume(&ticket, "Ana", None, GuestOptions { network: Network::Loopback, ..Default::default() }, token).unwrap();
     ana2.wait_joined(T).unwrap();
     let snapshot = loop {
         if let ToGuest::Sync(s @ ServerMsg::Snapshot { .. }) = next_msg(&ana2) {

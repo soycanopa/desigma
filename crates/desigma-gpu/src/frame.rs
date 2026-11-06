@@ -257,11 +257,14 @@ pub struct Program {
     pub needs_backdrop: bool,
     /// Set for fallback layers: the result is these pixels, `ops` is empty.
     pub pixels: Option<Arc<PixelData>>,
+    /// Content key: programs with equal keys and rect sizes render identical pixels relative
+    /// to their rect, so the executor may reuse a result from an earlier frame.
+    pub cache: Option<u64>,
 }
 
 impl Program {
     pub fn new(rect: IRect) -> Self {
-        Self { rect, clear: [0.0; 4], ops: Vec::new(), post: Vec::new(), needs_backdrop: false, pixels: None }
+        Self { rect, clear: [0.0; 4], ops: Vec::new(), post: Vec::new(), needs_backdrop: false, pixels: None, cache: None }
     }
 }
 

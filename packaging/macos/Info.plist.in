@@ -44,6 +44,10 @@
     <dict>
       <key>CFBundleTypeName</key>
       <string>desigma document</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>ai.deepfounder.desigma.document</string>
+      </array>
       <key>CFBundleTypeExtensions</key>
       <array>
         <string>desigma</string>
@@ -56,6 +60,10 @@
     <dict>
       <key>CFBundleTypeName</key>
       <string>Figma design file</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>com.figma.document</string>
+      </array>
       <key>CFBundleTypeExtensions</key>
       <array>
         <string>fig</string>
@@ -64,6 +72,56 @@
       <string>Viewer</string>
       <key>LSHandlerRank</key>
       <string>Alternate</string>
+    </dict>
+  </array>
+  <!-- macOS 11+ resolves documents through UTIs: without these declarations a .desigma file
+       gets a dyn.* type and cannot be opened from Finder (#29). -->
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>ai.deepfounder.desigma.document</string>
+      <key>UTTypeDescription</key>
+      <string>desigma document</string>
+      <key>UTTypeIconFile</key>
+      <string>desigma</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+        <string>public.content</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>desigma</string>
+        </array>
+      </dict>
+    </dict>
+  </array>
+  <!-- Imported, not exported: Figma owns the .fig type; when Figma is installed its
+       declaration wins and this one only fills in when it is not. -->
+  <key>UTImportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key>
+      <string>com.figma.document</string>
+      <key>UTTypeDescription</key>
+      <string>Figma design file</string>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.data</string>
+        <string>public.content</string>
+      </array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>fig</string>
+        </array>
+        <key>public.mime-type</key>
+        <string>application/x-figma</string>
+      </dict>
     </dict>
   </array>
 </dict>

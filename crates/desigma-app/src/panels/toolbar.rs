@@ -148,7 +148,8 @@ pub fn show(app: &mut App, ui: &mut Ui, screen: Rect) {
         if resp.clicked() {
             app.set_tool(tool);
         }
-        let tip = if tool.shortcut().is_empty() { tool.label().to_string() } else { format!("{}   {}", tool.label(), tool.shortcut()) };
+        let name = crate::i18n::tr(tool.label());
+        let tip = if tool.shortcut().is_empty() { name.to_string() } else { format!("{name}   {}", tool.shortcut()) };
         resp.on_hover_text(tip);
         x += theme::TOOL_BUTTON;
         if has_chev {

@@ -16,6 +16,20 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Set once an `--screenshot` run has written its PNG.
 pub static SHOT_OK: AtomicBool = AtomicBool::new(false);
+/// Why a `--screenshot` run produced no file, for the exit message.
+pub static SHOT_ERR: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Frames to wait for a requested screenshot before asking again; a request made while the
+/// window is still being resized or not yet presented can be dropped (#35).
+const SHOT_RETRY_FRAMES: u32 = 30;
+/// Frames after which a screenshot run gives up.
+const SHOT_GIVE_UP_FRAMES: u32 = 600;
+
+fn shot_error(msg: String) {
+    if let Ok(mut e) = SHOT_ERR.lock() {
+        *e = msg;
+    }
+}
 
 struct Shot {
     path: PathBuf,
@@ -23,7 +37,9 @@ struct Shot {
     /// Device pixel ratio: the PNG is `size * scale` pixels, laid out as `size` points.
     scale: f32,
     frames: u32,
-    requested: bool,
+    /// Frame of the latest screenshot request, and how many were sent.
+    requested_at: Option<u32>,
+    requests: u32,
 }
 
 pub struct Shell {
@@ -343,6 +359,13 @@ impl Shell {
     }
 }
 
+/// A `projects` folder next to the library folder instead of inside it: a hand-made project
+/// put one level too high, which the home screen would otherwise ignore without a word (#35).
+pub(crate) fn stray_projects_dir(library: &std::path::Path) -> Option<PathBuf> {
+    let stray = library.parent()?.join("projects");
+    (stray.is_dir() && stray != library.join("projects")).then_some(stray)
+}
+
 impl Shell {
     pub fn new(cc: &eframe::CreationContext<'_>, mut opts: Options) -> Self {
         // A real launch always has a library; screenshot runs only touch it for the home screen.
@@ -354,6 +377,9 @@ impl Shell {
         // "Open in new window" children leave update checks to the first window
         let launch = !screenshot && opts.open_id.is_none();
         let (gpu_flag, bridge_flag, library) = (opts.gpu, opts.bridge, opts.library.clone());
+        // Saved UI language, else the system one on an interactive launch (screenshots stay English
+        // unless a language was saved).
+        crate::i18n::set(crate::i18n::startup(library.as_deref(), !screenshot));
         let mut shell = Self::build(&cc.egui_ctx, opts);
         if let Some(rs) = &cc.wgpu_render_state {
             if let Some(max) = canvas::gpu::init(rs) {
@@ -365,6 +391,17 @@ impl Shell {
         let saved = library.as_deref().and_then(|l| crate::comments::settings::load_flag(l, "use_gpu"));
         shell.session().canvas.gpu.pref = if screenshot { gpu_flag } else { gpu_flag || saved.unwrap_or(true) };
         shell.session().updater.start(library.as_deref(), launch);
+        if let Some(stray) = library.as_deref().and_then(stray_projects_dir) {
+            let msg = format!(
+                "Projects in {} are outside the library and are not shown; move them into {}",
+                stray.display(),
+                library.as_deref().map(|l| l.join("projects")).unwrap_or_default().display()
+            );
+            eprintln!("desigma: {msg}");
+            if !screenshot {
+                shell.session().show_toast(msg, true);
+            }
+        }
         // Links and files from a second launch (and, on macOS, from Finder and the browser)
         crate::instance::set_context(&cc.egui_ctx);
         #[cfg(target_os = "macos")]
@@ -560,7 +597,8 @@ impl Shell {
             size: opts.size.unwrap_or((theme::DEFAULT_WINDOW.0 as u32, theme::DEFAULT_WINDOW.1 as u32)),
             scale: opts.scale.unwrap_or(1.0),
             frames: 0,
-            requested: false,
+            requested_at: None,
+            requests: 0,
         });
         // A session still on the home screen is the home session; anything else is tab 0.
         let (tabs, home, show_home) = if app.home.is_some() { (Vec::new(), Some(app), true) } else { (vec![app], None, false) };
@@ -591,8 +629,10 @@ impl Shell {
                     }
                     match buf.save(&shot.path) {
                         Ok(()) => SHOT_OK.store(true, Ordering::SeqCst),
-                        Err(e) => eprintln!("desigma: cannot write {}: {e}", shot.path.display()),
+                        Err(e) => shot_error(format!("cannot write {}: {e}", shot.path.display())),
                     }
+                } else {
+                    shot_error(format!("the captured frame ({w}x{h}) had no pixel data"));
                 }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 return;
@@ -602,11 +642,29 @@ impl Shell {
             let r = ctx.content_rect();
             (r.width() - shot.size.0 as f32).abs() < 1.5 && (r.height() - shot.size.1 as f32).abs() < 1.5
         };
-        if !shot.requested && ((shot.frames >= 12 && sized) || shot.frames >= 60) {
-            shot.requested = true;
+        let ready = (shot.frames >= 12 && sized) || shot.frames >= 60;
+        // A request can be dropped (a resize in flight, a frame never presented): ask again
+        // until a frame arrives instead of waiting on a single request.
+        let due = match shot.requested_at {
+            None => ready,
+            Some(at) => shot.frames >= at + SHOT_RETRY_FRAMES,
+        };
+        if due {
+            shot.requested_at = Some(shot.frames);
+            shot.requests += 1;
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::default()));
         }
-        if shot.frames > 240 {
+        if shot.frames > SHOT_GIVE_UP_FRAMES {
+            let r = ctx.content_rect();
+            shot_error(format!(
+                "no frame arrived after {} request(s) in {} frames (window {:.0}x{:.0}, wanted {}x{})",
+                shot.requests,
+                shot.frames,
+                r.width(),
+                r.height(),
+                shot.size.0,
+                shot.size.1
+            ));
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
@@ -850,7 +908,8 @@ impl Shell {
         let Some(t) = self.peek().toast.as_ref() else { return };
         let p = ui.painter();
         let font = theme::font_body();
-        let w = widgets::text_width(p, &t.text, &font) + 48.0;
+        let text = crate::i18n::tr_text(&t.text);
+        let w = widgets::text_width(p, &text, &font) + 48.0;
         let r = Rect::from_center_size(
             Pos2::new(screen.center().x, screen.bottom() - theme::TOAST_BOTTOM - theme::TOAST_HEIGHT / 2.0),
             Vec2::new(w, theme::TOAST_HEIGHT),
@@ -858,7 +917,7 @@ impl Shell {
         widgets::elevation_shadow(p, r, theme::TOAST_RADIUS);
         p.rect_filled(r, theme::cr(theme::TOAST_RADIUS), theme::BG_MENU);
         p.circle_filled(Pos2::new(r.left() + 16.0, r.center().y), 4.0, if t.error { theme::DANGER } else { theme::BG_BRAND });
-        p.text(Pos2::new(r.left() + 28.0, r.center().y), Align2::LEFT_CENTER, &t.text, font, theme::TEXT);
+        p.text(Pos2::new(r.left() + 28.0, r.center().y), Align2::LEFT_CENTER, text, font, theme::TEXT);
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
     }
 }
@@ -893,6 +952,11 @@ impl eframe::App for Shell {
     /// calls keep being answered; the bridge server requests a repaint for each one.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.session().now = ctx.input(|i| i.time);
+        self.session().poll_external_change(ctx);
+        if self.session().ext_watch.is_some() {
+            // Keep polling even while nothing else asks for frames.
+            ctx.request_repaint_after(std::time::Duration::from_millis(1000));
+        }
         self.session().poll_bridge();
         self.handle_opens(ctx);
         // Live sessions keep receiving messages while their tab is not the one being drawn.
@@ -990,8 +1054,10 @@ impl Shell {
         }
         crate::home::show(self.session(), ui);
         crate::home::dialog::show(self.session(), ctx);
+        crate::mcp_link::show(self.session(), ctx);
         crate::collab::ui::join_dialog(self.session(), ctx);
         crate::unsaved::dialog(self.session(), ctx);
+        crate::extwatch::dialog(self.session(), ctx);
         // opening a file from home turned the session into an editor tab
         self.promote_home();
         let full = ui.max_rect();
@@ -1139,10 +1205,12 @@ impl Shell {
         crate::plugins::ui::show(self.session(), &ctx);
         crate::updater::ui::show(self.session(), &ctx);
         crate::bridge::ui::show(self.session(), &ctx);
+        crate::mcp_link::show(self.session(), &ctx);
         crate::collab::ui::share_popover(self.session(), &ctx);
         crate::collab::ui::requests(self.session(), &ctx);
         crate::collab::ui::join_dialog(self.session(), &ctx);
         crate::unsaved::dialog(self.session(), &ctx);
+        crate::extwatch::dialog(self.session(), &ctx);
         self.toast(ui, full);
 
         self.sync_title(&ctx);

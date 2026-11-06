@@ -15,7 +15,7 @@ use std::{
 const USAGE: &str = "\
 desigma-server FILE [options]
 
-Keeps FILE (.desigma, or a .fig / REST .json / .svg to import) shared permanently.
+Keeps FILE (.desigma, or a .fig / .pen / REST .json / .svg to import) shared permanently.
 
   --password P            require this password to join (visible in `ps`; prefer --password-env)
   --password-env VAR      read the password from environment variable VAR

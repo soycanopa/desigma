@@ -98,7 +98,13 @@ pub fn show(app: &mut App, ui: &mut Ui, rect: Rect) {
 }
 
 fn section_title(ui: &Ui, row: Rect, title: &str) {
-    ui.painter().text(Pos2::new(row.left() + theme::PANEL_PADDING_X, row.center().y), Align2::LEFT_CENTER, title, theme::font_body_strong(), theme::TEXT);
+    ui.painter().text(
+        Pos2::new(row.left() + theme::PANEL_PADDING_X, row.center().y),
+        Align2::LEFT_CENTER,
+        crate::i18n::tr(title),
+        theme::font_body_strong(),
+        theme::TEXT,
+    );
 }
 
 fn pages_list(app: &mut App, ui: &mut Ui, list: Rect) {

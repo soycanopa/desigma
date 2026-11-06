@@ -10,7 +10,7 @@ use std::{
 /// Opens `input` and says where the document lives from now on, with a log line.
 ///
 /// * `.desigma` that exists: loaded. One that does not exist yet starts as a new empty document.
-/// * `.fig`, REST `.json`, `.svg`: imported and saved beside it as `<name>.desigma`. Once that
+/// * `.fig`, `.pen`, REST `.json`, `.svg`: imported and saved beside it as `<name>.desigma`. Once that
 ///   file exists it wins (so restarting with the same command keeps the edits made since).
 pub fn load_document(input: &Path) -> Result<(PathBuf, Document, String), String> {
     let ext = input.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();

@@ -70,7 +70,8 @@ impl<T> EventQueue<T> {
     }
 }
 
-/// Bind an endpoint for `network`. `Direct` skips relays and discovery.
+/// Bind an endpoint for `network`. `Direct` skips relays and discovery; `Loopback` also binds
+/// 127.0.0.1 only.
 pub async fn bind(network: Network, accept: bool) -> Result<Endpoint, NetError> {
     bind_with(network, accept, None, None).await
 }
@@ -81,12 +82,14 @@ pub async fn bind_with(network: Network, accept: bool, secret_key: Option<[u8; 3
     let alpns = if accept { vec![ALPN.to_vec()] } else { Vec::new() };
     let mut b = match network {
         Network::Internet => Endpoint::builder(presets::N0),
-        Network::Direct => Endpoint::builder(presets::Minimal).relay_mode(RelayMode::Disabled),
+        Network::Direct | Network::Loopback => Endpoint::builder(presets::Minimal).relay_mode(RelayMode::Disabled),
     };
     if let Some(k) = secret_key {
         b = b.secret_key(SecretKey::from_bytes(&k));
     }
-    if let Some(port) = port {
+    if network == Network::Loopback {
+        b = b.clear_ip_transports().bind_addr(format!("127.0.0.1:{}", port.unwrap_or(0))).map_err(|e| NetError::Bind(e.to_string()))?;
+    } else if let Some(port) = port {
         let bad = |e: iroh::endpoint::InvalidSocketAddr| NetError::Bind(e.to_string());
         b = b
             .clear_ip_transports()

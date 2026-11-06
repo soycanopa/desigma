@@ -245,7 +245,7 @@ pub fn share_popover(app: &mut App, ctx: &Context) {
         let w = POP_W - pad * 2.0;
         let x0 = rect.left() + pad;
         let mut y = rect.top() + 14.0;
-        p.text(Pos2::new(x0, y + 10.0), Align2::LEFT_CENTER, "Share", theme::font_large_strong(), theme::TEXT);
+        p.text(Pos2::new(x0, y + 10.0), Align2::LEFT_CENTER, crate::i18n::tr("Share"), theme::font_large_strong(), theme::TEXT);
         y += 32.0;
         if app.collab.hosting() {
             hosting_body(app, ui, &p, x0, w, &mut y);

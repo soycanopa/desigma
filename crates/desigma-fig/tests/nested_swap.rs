@@ -46,3 +46,15 @@ fn overridden_symbol_id_swaps_the_nested_instance() {
     assert_eq!(component_of(icon_b), Some(gear.id));
     assert_eq!(children(&doc, icon_b), vec!["Gear"]);
 }
+
+#[test]
+fn swapped_instance_takes_the_new_name_unless_renamed() {
+    let doc = import_fig(&nested_swap_fig(Compression::Zstd)).unwrap();
+    let users = find(&doc, "Icon / users");
+    // "Icon" was renamed in the main component, so it keeps that name after the swap ...
+    assert_eq!(children(&doc, find(&doc, "Row A")), vec!["Icon", "Icon / users"]);
+    // ... while the slot still named after its component follows the swap.
+    let swapped = child(&doc, find(&doc, "Row A"), "Icon / users");
+    assert_eq!(component_of(swapped), Some(users.id));
+    assert_eq!(children(&doc, find(&doc, "Row B")), vec!["Icon", "Icon / settings"]);
+}

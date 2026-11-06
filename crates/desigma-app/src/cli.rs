@@ -77,6 +77,8 @@ pub struct Options {
     pub help: bool,
     /// Print `desigma <version>` and exit.
     pub version: bool,
+    /// Print the resolved library folder (`--library`, `$DESIGMA_LIBRARY` or the default) and exit.
+    pub print_library_path: bool,
 }
 
 impl Options {
@@ -121,10 +123,23 @@ pub const PANELS: [&str; 28] = [
     "updater-banner",
 ];
 
+/// Smallest and largest `--size` side, in points.
+pub const MIN_SIZE: u32 = 200;
+pub const MAX_SIZE: u32 = 8192;
+
 pub fn parse_size(s: &str) -> Option<(u32, u32)> {
     let (w, h) = s.split_once(['x', 'X'])?;
     let (w, h) = (w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?);
-    (w >= 200 && h >= 200 && w <= 8192 && h <= 8192).then_some((w, h))
+    ((MIN_SIZE..=MAX_SIZE).contains(&w) && (MIN_SIZE..=MAX_SIZE).contains(&h)).then_some((w, h))
+}
+
+/// Why `s` is not a valid `--size`, naming the actual constraint (#35).
+fn size_error(s: &str) -> String {
+    let parsed = s.split_once(['x', 'X']).and_then(|(w, h)| Some((w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?)));
+    match parsed {
+        None => format!("invalid size '{s}' (expected WxH, e.g. 1600x1088)"),
+        Some(_) => format!("invalid size '{s}': each side must be between {MIN_SIZE} and {MAX_SIZE}"),
+    }
 }
 
 /// Parses a scale like `2` or `1.5` (device pixel ratio of a screenshot, pixel scale of an
@@ -153,7 +168,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--screenshot" => o.screenshot = Some(it.next().ok_or("--screenshot needs an output path")?.into()),
             "--size" => {
                 let v = it.next().ok_or("--size needs WxH")?;
-                o.size = Some(parse_size(&v).ok_or_else(|| format!("invalid size '{v}' (expected WxH, e.g. 1600x1088)"))?);
+                o.size = Some(parse_size(&v).ok_or_else(|| size_error(&v))?);
             }
             "--scale" => {
                 let v = it.next().ok_or("--scale needs a factor (e.g. 2)")?;
@@ -233,6 +248,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
             "--seed-library" => o.seed_library = Some(it.next().ok_or("--seed-library needs a directory")?.into()),
             "-h" | "--help" => o.help = true,
             "-V" | "--version" => o.version = true,
+            "--print-library-path" => o.print_library_path = true,
             s if s.starts_with("--") => return Err(format!("unknown option {s}")),
             s if s.get(..10).is_some_and(|p| p.eq_ignore_ascii_case("desigma://")) => o.join = Some(a),
             // a file manager may hand over `file:///...` URLs (the Linux launcher passes %U)
@@ -263,14 +279,15 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Options, String> 
     Ok(o)
 }
 
-pub const USAGE: &str = "usage: desigma [FILE|desigma://join/LINK] [--screenshot OUT.png] [--size WxH] [--scale FACTOR] [--select LAYER|none] [--menu main|main/File|shape|palette] [--panel interaction|present-variables|variables|variables-floating|libraries|picker|picker-page|fill-d9|picker-gradient|effects-menu|stroke-settings|type-details|effect-noise|effect-texture|effect-glass|version-history|dev-annotate|dev-compare|motion-inspector|motion-easing|motion-library|motion-clip|updater|updater-banner|share|collab]\n               [--zoom PERCENT] [--rulers] [--grid] [--gpu] [--bridge] [--home] [--library DIR] [--layout-grid grid|columns|rows] [--edit-text LAYER [--select-text START-END]]\n  FILE  .fig, .json (Figma REST or native), .svg or .desigma; without a file the projects home screen opens
+pub const USAGE: &str = "usage: desigma [FILE|desigma://join/LINK] [--screenshot OUT.png] [--size WxH] [--scale FACTOR] [--select LAYER|none] [--menu main|main/File|shape|palette] [--panel interaction|present-variables|variables|variables-floating|libraries|picker|picker-page|fill-d9|picker-gradient|effects-menu|stroke-settings|type-details|effect-noise|effect-texture|effect-glass|version-history|dev-annotate|dev-compare|motion-inspector|motion-easing|motion-library|motion-clip|updater|updater-banner|share|collab]\n               [--zoom PERCENT] [--rulers] [--grid] [--gpu] [--bridge] [--home] [--library DIR] [--layout-grid grid|columns|rows] [--edit-text LAYER [--select-text START-END]]\n  FILE  .fig, .pen (Pencil), .json (Figma REST or native), .svg or .desigma; without a file the projects home screen opens
   desigma://join/LINK  open the Join session dialog with a shared link filled in
   --scale    with --screenshot: device pixel ratio (2 writes a PNG twice --size, rendered crisp rather than upscaled)
   --home     show the home screen (also in --screenshot mode)
+  --print-library-path  print the library folder desigma uses and exit
   --present  open presentation preview; --fullscreen starts it in native fullscreen (F11 toggles, Esc returns)
   --gpu      draw the canvas on the GPU; --screenshot uses the CPU renderer unless this is given
   --bridge   let desigma-mcp control this editor (Preferences → Allow MCP agents… makes it permanent)
-  --library  use DIR as the projects library instead of the default location
+  --library  use DIR as the projects library instead of the default ($DESIGMA_LIBRARY or the user data folder); projects live in DIR/projects
   --dev      open Dev mode with a code language (css|tailwind|swiftui|compose|react); --dev-demo marks the selection Ready for dev with an annotation
   --motion   open Motion mode with a demo animation on the selected layer
   --seed-library  write the showcase sample files (a project with three files) into DIR and exit
@@ -359,6 +376,11 @@ mod tests {
         assert!(p(&["a", "b"]).is_err());
         assert_eq!(parse_size("1440X900"), Some((1440, 900)));
         assert_eq!(parse_size("10x10"), None);
+        assert_eq!(parse_size("200x150"), None);
+        let e = p(&["--size", "200x150", "--screenshot", "a.png"]).unwrap_err();
+        assert!(e.contains("between 200 and 8192"), "{e}");
+        assert!(p(&["--size", "wide", "--screenshot", "a.png"]).unwrap_err().contains("expected WxH"));
+        assert!(p(&["--print-library-path"]).unwrap().print_library_path);
     }
 
     #[test]

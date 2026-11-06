@@ -7,6 +7,14 @@ fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
+    // The UI thread walks the layer tree recursively (render, layout, import). Windows reserves
+    // 1 MiB for the main thread, which deeply nested imported files overflow; Linux and macOS
+    // give it 8 MiB.
+    match std::env::var("CARGO_CFG_TARGET_ENV").as_deref() {
+        Ok("msvc") => println!("cargo:rustc-link-arg-bin=desigma=/STACK:16777216"),
+        Ok("gnu") => println!("cargo:rustc-link-arg-bin=desigma=-Wl,--stack,16777216"),
+        _ => {}
+    }
     let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.0.0".into());
     let mut res = winresource::WindowsResource::new();
     res.set_icon("../../assets/icon/desigma.ico");

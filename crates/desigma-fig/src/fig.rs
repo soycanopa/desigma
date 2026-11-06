@@ -376,6 +376,9 @@ fn convert_node(nc: &Value, id: &str, lk: &Lk) -> Option<Map<String, Value>> {
         "SYMBOL" => "COMPONENT",
         "ROUNDED_RECTANGLE" => "RECTANGLE",
         "FRAME" if nc.get("isStateGroup").and_then(Value::as_bool) == Some(true) => "COMPONENT_SET",
+        // Groups are stored as frames that resize to fit their children
+        // (and, unlike hugging auto-layout frames, have no stack mode).
+        "FRAME" if nc.get("resizeToFit").and_then(Value::as_bool) == Some(true) && matches!(fstr(nc, "stackMode"), None | Some("NONE")) => "GROUP",
         other => other,
     };
     let mut m = Map::new();
@@ -653,9 +656,21 @@ fn explicit_modes(nc: &Value, lk: &Lk) -> Option<Value> {
 /// `componentPropRefs`). Variants refer to their set's definitions through
 /// `parentPropDefId`; see [`Lk::prop_defs`].
 fn component_props(m: &mut Map<String, Value>, nc: &Value, lk: &Lk) {
-    let text_of = |v: &Value| -> Option<Value> { Some(Value::String(fstr(v.get("textValue")?, "characters")?.to_string())) };
+    // Older files hold a plain `ComponentPropValue` (`initialValue` / `value`:
+    // boolValue, textValue, guidValue); newer ones may hold only a typed
+    // `varValue` whose `value` carries boolValue, textDataValue or
+    // symbolIdValue.guid.
+    let text_of = |v: &Value, k: &str| -> Option<Value> { Some(Value::String(fstr(v.get(k)?, "characters")?.to_string())) };
     let value_of = |v: &Value| -> Option<Value> {
-        v.get("boolValue").cloned().or_else(|| text_of(v)).or_else(|| v.get("guidValue").and_then(guid_str).map(Value::String))
+        v.get("boolValue")
+            .cloned()
+            .or_else(|| text_of(v, "textValue"))
+            .or_else(|| text_of(v, "textDataValue"))
+            .or_else(|| v.get("guidValue").and_then(guid_str).map(Value::String))
+            .or_else(|| v.get("symbolIdValue").and_then(|s| s.get("guid")).and_then(guid_str).map(Value::String))
+    };
+    let prop_value = |p: &Value, plain: &str| -> Option<Value> {
+        p.get(plain).and_then(value_of).or_else(|| p.get("varValue").and_then(|v| v.get("value")).and_then(value_of))
     };
     let mut defs = Map::new();
     for d in rest_import::farr(nc, "componentPropDefs") {
@@ -663,7 +678,7 @@ fn component_props(m: &mut Map<String, Value>, nc: &Value, lk: &Lk) {
         let Some((key, ty)) = lk.prop_defs.get(&id) else { continue };
         let mut def = Map::new();
         def.insert("type".into(), (*ty).into());
-        if let Some(v) = d.get("initialValue").and_then(value_of) {
+        if let Some(v) = prop_value(d, "initialValue") {
             def.insert("defaultValue".into(), v);
         }
         if *ty == "VARIANT" {
@@ -682,22 +697,31 @@ fn component_props(m: &mut Map<String, Value>, nc: &Value, lk: &Lk) {
     let mut vals = Map::new();
     for a in rest_import::farr(nc, "componentPropAssignments") {
         let Some((key, ty)) = a.get("defID").and_then(guid_str).and_then(|id| lk.prop_defs.get(&id)) else { continue };
-        let Some(v) = a.get("value").and_then(value_of) else { continue };
+        let Some(v) = prop_value(a, "value") else { continue };
         vals.insert(key.clone(), json!({"type": ty, "value": v}));
     }
     if !vals.is_empty() {
         m.insert("componentProperties".into(), Value::Object(vals));
     }
+    let ref_field = |f: Option<&str>| match f {
+        Some("VISIBLE") => Some("visible"),
+        Some("TEXT_DATA") => Some("characters"),
+        Some("OVERRIDDEN_SYMBOL_ID") => Some("mainComponent"),
+        _ => None,
+    };
     let mut refs = Map::new();
     for r in rest_import::farr(nc, "componentPropRefs") {
         let Some((key, _)) = lk.prop_def(r) else { continue };
-        let field = match fstr(r, "componentPropNodeField") {
-            Some("VISIBLE") => "visible",
-            Some("TEXT_DATA") => "characters",
-            Some("OVERRIDDEN_SYMBOL_ID") => "mainComponent",
-            _ => continue,
-        };
+        let Some(field) = ref_field(fstr(r, "componentPropNodeField")) else { continue };
         refs.insert(field.into(), key.clone().into());
+    }
+    // Newer files bind through `parameterConsumptionMap`: a PROP_REF
+    // variable whose `propRefValue.defId` names the property.
+    for e in nc.get("parameterConsumptionMap").map(|m| rest_import::farr(m, "entries")).unwrap_or(&[]) {
+        let Some(data) = e.get("variableData").filter(|d| fstr(d, "dataType") == Some("PROP_REF")) else { continue };
+        let def = data.get("value").and_then(|v| v.get("propRefValue")).and_then(|p| p.get("defId")).and_then(guid_str);
+        let (Some((key, _)), Some(field)) = (def.and_then(|d| lk.prop_defs.get(&d)), ref_field(fstr(e, "variableField"))) else { continue };
+        refs.entry(field).or_insert_with(|| key.clone().into());
     }
     if !refs.is_empty() {
         m.insert("componentPropertyReferences".into(), Value::Object(refs));

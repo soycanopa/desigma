@@ -242,6 +242,53 @@ fn board_sections_and_tables_match_cpu() {
     assert!(c.report_aa.ratio < 0.01, "mismatch with AA forgiven {:.3}%", c.report_aa.ratio * 100.0);
 }
 
+/// Drop shadows that need a blurred silhouette (ellipse, stroked rectangle, shadow hidden behind
+/// the shape), the kind whose results the executor keeps between frames.
+fn shadow_scene() -> (Document, NodeId, NodeId) {
+    let mut t = T::new();
+    let shadow = |show_behind| Effect::DropShadow {
+        color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.4 },
+        offset: Vec2::new(4.0, 6.0),
+        radius: 12.0,
+        spread: 0.0,
+        visible: true,
+        show_behind,
+    };
+    let e = t.add(None, |id| Node::ellipse(id, Rect::new(30.0, 30.0, 80.0, 60.0)));
+    t.node(e).fills = vec![Paint::solid(Color::rgb(0x18, 0xA0, 0xFB))];
+    t.node(e).effects = vec![shadow(false)];
+    let r = t.rect(None, Rect::new(160.0, 40.0, 90.0, 50.0), Color::rgba(0xF2, 0x4E, 0x1E, 200));
+    t.node(r).stroke = Stroke { paints: vec![Paint::solid(Color::BLACK)], weight: 3.0, ..Default::default() };
+    t.node(r).effects = vec![shadow(true)];
+    (t.doc, t.page, r)
+}
+
+#[test]
+fn cached_shadows_match_a_fresh_render_while_panning_and_editing() {
+    let (Some(mut warm), Some(mut fresh)) = (gpu(), gpu()) else { return };
+    let (mut doc, page, rect) = shadow_scene();
+    let size = (320, 160);
+    let draw = |g: &mut desigma_gpu::HeadlessGpu, doc: &Document, rev: u64, x: f32| {
+        let f = g.compile(doc, page, rev, &Viewport { offset: Vec2::new(x, 0.0), zoom: 1.0, dpr: 2.0 }, size);
+        g.render_frame(&f, size)
+    };
+    // pan by whole device pixels: later frames reuse the shadows rendered by the first
+    for step in 0..4 {
+        draw(&mut warm, &doc, 1, step as f32 * 3.0);
+    }
+    let reused = draw(&mut warm, &doc, 1, 9.0);
+    assert!(warm.renderer.stats.results_reused >= 3, "{:?}", warm.renderer.stats);
+    assert_eq!(reused.data(), draw(&mut fresh, &doc, 1, 9.0).data(), "a reused shadow differs from a freshly rendered one");
+    // an edit of what the silhouette depends on (fill alpha, size) must not reuse the old shadow
+    doc.get_mut(rect).unwrap().fills = vec![Paint::solid(Color::rgba(0xF2, 0x4E, 0x1E, 60))];
+    doc.get_mut(rect).unwrap().size = Vec2::new(70.0, 50.0);
+    let edited = draw(&mut warm, &doc, 2, 9.0);
+    // the ellipse's shadows are still reused, the edited rectangle's is rendered again
+    assert!(warm.renderer.stats.results_reused >= 2, "{:?}", warm.renderer.stats);
+    let mut clean = gpu().unwrap();
+    assert_eq!(edited.data(), draw(&mut clean, &doc, 2, 9.0).data(), "an edited node kept its old shadow");
+}
+
 #[test]
 fn board_sections_and_tables_through_the_cpu_fallback_match_cpu() {
     let Some(mut g) = gpu() else { return };

@@ -1,0 +1,17 @@
+[package]
+name = "desigma-pen"
+description = "Pencil (.pen) file import for desigma: maps the JSON object tree onto desigma nodes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+desigma-doc.workspace = true
+desigma-engine.workspace = true
+desigma-fig.workspace = true
+image = { workspace = true, features = ["jpeg", "gif", "webp"] }
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+desigma-render.workspace = true
